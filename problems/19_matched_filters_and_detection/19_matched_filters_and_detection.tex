@@ -1,0 +1,117 @@
+%% META id=19
+%% META slug=19_matched_filters_and_detection
+%% META title=Matched Filters and Detection Theory
+%% META part=D
+%% META level=4
+%% META effort=14--20 hours
+%% META prereq=Problems 07, 13, 14
+%% META theory=Neyman--Pearson detection, correlator and matched filter, ROC curves, coloured-noise whitening, optimal SNR, template banks and match, trials factor and false-alarm rate, pulse compression
+%% META skills=Monte Carlo ROC estimation, FFT matched filtering, whitening with an estimated PSD, background calibration from noise-only data, template-bank construction, trials-factor calculation
+\documentclass[11pt,a4paper]{article}
+\usepackage{spl}
+\begin{document}
+\splheader{19}{Matched Filters and Detection Theory}{Part D: Digital Signal Processing \quad Level 4}%
+{Hypothesis Testing, Matched Filter, ROC, Whitening, Template Banks, False-Alarm Rate}%
+{Problems 07, 13, 14}{14--20 hours}
+
+\begin{summarybox}{Matched Filters and Detection Theory: Deciding That Something Is There}
+A detection is a decision under uncertainty, and the optimal decision rule is known. Derive the matched filter from the Neyman--Pearson lemma, verify its performance by Monte Carlo, whiten coloured noise, search a template bank for a chirp, calibrate the false-alarm rate on noise-only data including the trials factor, and run the whole machine on open gravitational-wave data.
+\end{summarybox}
+
+\generalinstructions{19\_matched\_filters\_and\_detection}
+
+\section*{Background and Motivation}
+Radar, gravitational-wave interferometers, GPS receivers and gamma-ray burst monitors all ask the same question: is a known kind of signal hidden in this noisy record, and with what confidence? Statistical decision theory gives the answer. For a known waveform in Gaussian noise the optimal detector is a correlation with that waveform, the \emph{matched filter}, and its performance depends on a single number, the signal-to-noise ratio. For unknown parameters (arrival time, mass, frequency) one maximises over a bank of templates, which brings a price: the more places you look, the more false alarms you get.
+
+This problem develops the theory and then practises the discipline that makes a detection claim credible: calibrate the background on data that cannot contain the signal, count trials honestly, and compare with the theoretical optimum. It is the quantitative backbone of the transient-detection capstone (problem 25).
+
+\section*{Theoretical Framework}
+\subsection{Hypothesis Testing}
+Choose between $H_0$: $y=n$ and $H_1$: $y=s+n$ for a known $s$. The Neyman--Pearson lemma states that the test maximising the detection probability $P_d$ at fixed false-alarm probability $P_{fa}$ is the likelihood-ratio test. For white Gaussian noise of variance $\sigma^2$ it reduces to the correlator
+\begin{equation}
+  T(y)=\sum_ny[n]\,s[n]\ \ \overset{H_1}{\underset{H_0}{\gtrless}}\ \gamma,\qquad
+  P_d=\Qfunc\!\big(\Qfunc^{-1}(P_{fa})-d\big),\qquad d^2=\frac{\sum_ns[n]^2}{\sigma^2}=\frac{E_s}{\sigma^2},
+  \label{eq:np}
+\end{equation}
+where $d$ is the deflection coefficient. The receiver operating characteristic (ROC) is $P_d$ against $P_{fa}$.
+
+\subsection{Matched Filter}
+The filter $h[n]=s[N-1-n]$ maximises the output SNR at the sampling instant $n=N-1$; its output is the cross-correlation of $y$ with $s$ and the peak SNR is $d^2=2E_s/N_0$ (continuous time, one-sided noise density $N_0$). For an unknown arrival time the output is searched over all lags; it is computed efficiently with FFTs.
+
+\subsection{Coloured Noise and Optimal SNR}
+For Gaussian noise with one-sided PSD $S_n(f)$ define the noise-weighted inner product $(a|b)=4\,\Re\!\int_0^\infty\tilde a(f)\tilde b^\ast(f)/S_n(f)\,\dd f$. The optimal SNR of a signal $h$ is
+\begin{equation}
+  \rho^2=(h|h)=4\int_0^\infty\frac{|\tilde h(f)|^2}{S_n(f)}\dd f,
+  \label{eq:rho}
+\end{equation}
+and the matched-filter SNR time series is $\rho(t)=(s|h_t)/\sqrt{(h|h)}$. Equivalently, whiten both data and template by $1/\sqrt{S_n}$ and apply the white-noise matched filter. In the absence of signal $\rho(t)$ is Gaussian with unit variance.
+
+\subsection{Template Banks and Match}
+When the signal depends on parameters $\vect\theta$ (here chirp mass), search over a bank $\{h_{\vect\theta_i}\}$. The \emph{match} between normalised templates $\hat h_1,\hat h_2$ is $\mathcal M=\max_{t_0}(\hat h_1|\hat h_{2,t_0})$; a signal whose parameters fall between templates loses a fraction $1-\mathcal M$ of its SNR. Banks are spaced so that the minimal match is, say, $0.97$.
+
+\subsection{False Alarms and Trials}
+With $N_{\rm trials}$ effectively independent tests per record, the false-alarm probability of the loudest is $P_{fa}^{\rm tot}\approx1-(1-P_1)^{N_{\rm trials}}\approx N_{\rm trials}P_1$ with $P_1=\Qfunc(\rho_{\rm thr})$ per trial. The number of independent trials in time is about $T\,B_{\rm eff}$ (duration times effective bandwidth) times the number of templates. Real noise has non-Gaussian glitches, so thresholds should be calibrated empirically from noise-only data (time slides, off-source segments), not from the Gaussian tail alone.
+
+\subsection{Pulse Compression}
+A linear-FM pulse of duration $T$ and bandwidth $B$ has time--bandwidth product $BT$; its matched filter compresses it to width $\sim1/B$ with SNR gain $BT$ (in power) over a simple pulse of the same energy, and radar range scales as $R_{\max}\propto\mathrm{SNR}^{1/4}$.
+
+\section*{Data and Simulation Specification}
+\begin{simtable}
+Pulse in white noise & Gaussian pulse of width 20 samples in $\sigma=1$ white noise, scaled to $d=1,2,3,4,5$; $10^5$ trials per point.\\
+Mismatched template & Template widths $10,15,20,30,40$ samples against a signal of width 20.\\
+Chirp in white noise & Linear chirp, $N=4096$ samples, injected at a random position, per-sample SNR chosen to give $\rho=8$.\\
+Chirp in coloured noise & \texttt{sp\_common.synth.chirp\_in\_noise(fs=4096, duration=16, mchirp\_msun=30, target\_snr=8)} (and 12, 20); the generator returns the injected optimal SNR, the template, and \texttt{toy\_ligo\_psd}.\\
+Background & 225 independent noise-only records of 16 s (one hour in total) from \texttt{colored\_noise} with the toy PSD.\\
+Template bank & Chirp masses $15$--$45\,M_\odot$ with \texttt{sp\_common.synth.newtonian\_chirp}.\\
+Real data (strongly recommended) & GW150914 (H1 and L1, 32 s at \kHz{4}) from GWOSC; estimate the PSD from off-source data around the event, whiten, band-pass \Hz{20}--\Hz{300}, and filter with a chirp template of $\mathcal M_c\approx\SI{28}{M_\odot}$.
+\end{simtable}
+
+\section*{Your Task}
+\begin{tasks}
+  \item \textbf{Detection theory by simulation (Stage 2).} For the pulse in white noise, compute $P_d$ at $P_{fa}=10^{-3}$ for $d=1,\dots,5$ by Monte Carlo and compare with Eq.~\eqref{eq:np}. Plot ROC curves at $d=2,3,4$ with Wilson intervals and confirm the analytic curve lies within them.
+  \item \textbf{Matched versus mismatched and energy detectors.} Measure the SNR loss of the mismatched templates and express it in dB and as a $P_d$ loss at $P_{fa}=10^{-3}$. Compare with an energy detector (sum of squares in the right window). Show how much more signal energy the energy detector needs for the same $P_d$.
+  \item \textbf{FFT matched filter for a chirp.} Implement the matched filter for the chirp in white noise by FFT cross-correlation. Normalise so that the noise-only output has unit variance (check over 1000 realisations), find the peak time and compare the empirical peak-SNR distribution with $\rho\pm1$.
+  \item \textbf{Coloured noise and whitening.} For \texttt{chirp\_in\_noise}, estimate the PSD with Welch's method from a signal-free stretch, whiten data and template and form $\rho(t)$. Compare the recovered peak SNR with the injected $\rho$ for 200 noise realisations at each of $\rho=8,12,20$, and with the SNR obtained when you skip the whitening. Compare the timing error of the peak with $\sigma_t\approx1/(2\pi f_{\rm rms}\rho)$ for the signal's effective bandwidth $f_{\rm rms}$.
+  \item \textbf{False-alarm calibration.} Run the matched filter over the one hour of noise-only records, build the distribution of the loudest $\rho$ per record and determine the threshold giving one false alarm per hour and per day (extrapolate with a Gaussian-tail model and state its validity). Compare with the single-trial $\Qfunc(\rho_{\rm thr})$ and with the trials factor you calculate from $T B_{\rm eff}$.
+  \item \textbf{Template bank.} Compute the match between templates of different chirp mass, build a bank with minimal match $0.97$ across $15$--$45\,M_\odot$, count its templates and measure the SNR loss for injections at random masses. Show how the bank size raises the threshold needed for the same false-alarm rate.
+  \item \textbf{Real data.} Run the full pipeline on GW150914: whiten, filter, produce $\rho(t)$, report the peak time and SNR in both detectors and the time difference between them, and compare with the published values. Explain why a Newtonian template recovers a substantially lower SNR than the published matched-filter SNR of about 24.
+\end{tasks}
+
+\begin{checkpoint}
+For $P_{fa}=10^{-3}$ the threshold is $\Qfunc^{-1}(10^{-3})=3.09$; with $d=4$ the detection probability is $P_d=\Qfunc(3.09-4)=0.82$. A matched-filter output on noise only is $\mathcal N(0,1)$ to within sampling error. The injected \texttt{target\_snr} equals Eq.~\eqref{eq:rho} for the generator's PSD and $\rho(t)$ at the true time must scatter around it with unit standard deviation. A pulse-compression gain of $BT=1000$ is \dB{30}.
+\end{checkpoint}
+
+\section*{Aerospace Application Link}
+A pulsed radar detects a target at range $R$ with $\mathrm{SNR}\propto R^{-4}$. Using Eq.~\eqref{eq:np}, compute the SNR needed for $P_d=0.9$ at $P_{fa}=10^{-6}$ and the factor by which the maximum range increases when a linear-FM pulse of time--bandwidth product $BT=1000$ replaces a simple pulse of the same peak power and duration ($10^{30/40}\approx5.6$ in range for \dB{30} of gain). Then use the same machinery to state, for a GRB-like count excess searched on three timescales over a day, the SNR threshold you would adopt and the trials factor you used.
+
+\section*{Deliverables}
+\begin{delivs}
+  \item[D1] \textbf{Detection-theory simulation:} the $P_d$ table and ROC curves with analytic overlays.
+  \item[D2] \textbf{Mismatch and energy detector:} the SNR loss table and the energy-detector comparison.
+  \item[D3] \textbf{Chirp matched filter:} white-noise FFT implementation, unit-variance check and the coloured-noise whitened version with the recovered-SNR histogram.
+  \item[D4] \textbf{Background calibration:} the one-hour noise-only run, threshold-versus-FAR curve and the trials-factor analysis.
+  \item[D5] \textbf{Template bank and real data:} the bank construction, match matrix and the GW150914 result.
+  \item[D6] \textbf{Memo (300 words):} ``What does a 5-sigma detection mean, and how did we count trials?'' Cite at least two external sources.
+  \item[Bonus] (a) Implement the $\chi^2$ signal-consistency test of Allen and show it rejects a loud glitch. (b) Detect a coherent signal in two detectors with a time-shift window and estimate the false-alarm rate from time slides. (c) Derive and simulate the optimal detector for Poisson counts (log-likelihood-ratio weights $\ln(1+s/b)$).
+\end{delivs}
+
+\section*{Learning Resources}
+\resourcegroup{Detection and Estimation Theory}
+\begin{resources}
+  \item Kay, S.M. \emph{Fundamentals of Statistical Signal Processing, Vol.~II: Detection Theory} (Neyman--Pearson, matched filter, deflection coefficient).
+  \item Van Trees, H.L. \emph{Detection, Estimation, and Modulation Theory, Part I}.
+  \item Richards, M.A. \emph{Fundamentals of Radar Signal Processing} (matched filtering, pulse compression, detection).
+\end{resources}
+\resourcegroup{Gravitational-Wave Data Analysis}
+\begin{resources}
+  \item Allen, B., Anderson, W.G., Brady, P.R., Brown, D.A., Creighton, J.D.E. (2012). ``FINDCHIRP: an algorithm for detection of gravitational waves from inspiraling compact binaries.'' Phys.\ Rev.\ D 85, 122006, arXiv:gr-qc/0509116.
+  \item Abbott, B.P.\ et al.\ (2016). ``GW150914: first results from the search for binary black hole coalescence with Advanced LIGO.'' Phys.\ Rev.\ D 93, 122003.
+  \item GWOSC tutorials on whitening and matched filtering: \url{https://gwosc.org/tutorials/}; PyCBC (optional): \url{https://pycbc.org}
+\end{resources}
+\resourcegroup{Tools}
+\begin{resources}
+  \item SciPy \texttt{signal.correlate}, \texttt{signal.welch}, \texttt{stats.norm.isf}: \url{https://docs.scipy.org/doc/scipy/reference/}
+\end{resources}
+
+\evaluation
+\end{document}

@@ -1,0 +1,107 @@
+%% META id=22
+%% META slug=22_clustering_and_anomaly_detection
+%% META title=Clustering and Anomaly Detection: From n-Sigma to DBSCAN
+%% META part=E
+%% META level=4
+%% META effort=16--22 hours
+%% META prereq=Problems 07, 18, 21
+%% META theory=n-sigma exceedance detection, DBSCAN and k-distance, Isolation Forest, PCA reconstruction error, injection--recovery efficiency, false-alarm calibration, detector comparison
+%% META skills=Event-list binning, baseline and robust sigma, DBSCAN parameter selection, Isolation Forest, injection-recovery experiments, threshold calibration on null data, anomaly detection on spectra
+\documentclass[11pt,a4paper]{article}
+\usepackage{spl}
+\begin{document}
+\splheader{22}{Clustering and Anomaly Detection}{Part E: Machine Learning for Signals \quad Level 4}%
+{Threshold Detection, DBSCAN, Isolation Forest, PCA Anomaly Scores, Injection--Recovery, Burst Detection}%
+{Problems 07, 18, 21}{16--22 hours}
+
+\begin{summarybox}{Clustering and Anomaly Detection: Finding the Unexpected Without Labels}
+A burst, a failing sensor, an odd spectrum: nobody labelled them in advance. Turn a photon event list into a light curve, find excesses with $n$-sigma thresholds, group them with DBSCAN, compare Isolation Forest and PCA scores, and, crucially, measure each detector's false-alarm rate on null data and its efficiency on injected bursts. This is the burst-search pipeline of your session notebook, rebuilt with a measured performance.
+\end{summarybox}
+
+\generalinstructions{22\_clustering\_and\_anomaly\_detection}
+
+\section*{Background and Motivation}
+Transient astronomy is anomaly detection with stakes: a gamma-ray burst lasts seconds, happens rarely and unpredictably, and must be caught from a stream of photon arrival times in which the background is orders of magnitude brighter. Typical pipelines build a binned light curve, subtract a slowly varying background, flag bins above a threshold, and then group the flagged bins into candidate events. The grouping step is a clustering problem; density-based clustering (DBSCAN) is natural because a burst is a dense run of consecutive excesses while noise exceedances are isolated.
+
+An anomaly detector without a measured false-alarm rate and measured sensitivity is an opinion. The core of this problem is the discipline of the \emph{injection--recovery} experiment: run the detector on data with no signal to measure how often it fires falsely, then inject fake bursts of known strength to measure how often it finds them. Only then can two detectors be compared fairly.
+
+\section*{Theoretical Framework}
+\subsection{Light Curve and Excess}
+Photon arrival times $\{t_i\}$ binned with width $\Delta t$ give counts $c_j$ (Poisson, problem 07). A slowly varying baseline $b_j$ is estimated robustly (running median over a window much longer than the burst) and the significance is $z_j=(c_j-b_j)/\sqrt{b_j}$. A bin is an \emph{exceedance} if $z_j>n$; for Gaussian statistics the one-sided probability is $\Qfunc(n)$ per bin, but for low counts use the Poisson tail.
+
+\subsection{DBSCAN}
+Given points $\vect p_i$, a radius $\epsilon$ and a count $m_{\min}$: a \emph{core point} has at least $m_{\min}$ points within $\epsilon$; clusters are maximal sets of density-connected points; points belonging to no cluster are \emph{noise} (label $-1$). To choose $\epsilon$ plot the sorted distance to the $m_{\min}$-th nearest neighbour (the $k$-distance plot) and place $\epsilon$ at the knee. The features must be scaled (for example time in seconds and significance in $\sigma$, each standardised) so that distances mean something.
+
+\subsection{Isolation Forest}
+Random trees recursively split features at random thresholds; anomalies are isolated in fewer splits. With average path length $E[h(x)]$ over the forest the anomaly score is
+\begin{equation}
+  s(x,n)=2^{-E[h(x)]/c(n)},\qquad c(n)=2H(n-1)-\frac{2(n-1)}n,\quad H(i)\approx\ln i+0.5772.
+  \label{eq:iso}
+\end{equation}
+Scores near $1$ are anomalous, below $0.5$ normal. It needs features that describe \emph{windows} of the light curve (mean, standard deviation, slope, maximum), not single bins.
+
+\subsection{PCA Reconstruction Error}
+Project onto the first $k$ principal components of normal data and reconstruct; the squared residual $\norm{\vect x-\hat{\vect x}}^2$ is large for patterns outside the normal subspace.
+
+\subsection{Evaluating Detectors}
+\emph{Efficiency} (completeness) at injected strength $A$ is the fraction recovered; the \emph{false-alarm rate} is the number of detections per unit of null data. Compare detectors at the \emph{same} false-alarm rate by calibrating each threshold on null data. For unbalanced problems use the precision--recall curve and average precision; confidence intervals on rates come from the Wilson interval (\texttt{sp\_common.stats.wilson\_interval}).
+
+\section*{Data and Simulation Specification}
+\begin{simtable}
+Event list & \texttt{sp\_common.synth.grb\_event\_list(duration=300, bkg\_rate=250, amp=300, t0=120, rise=0.5, decay=4.0, drift=0.15)}: event times (s), energies (keV, 20--200), detector quadrants; returns the truth including the true rate function. Vary \texttt{amp} (10, 30, 100, 300) and \texttt{seed} for injection--recovery.\\
+Null set & 500 light curves with \texttt{amp=0}, different seeds.\\
+Binning & $\Delta t=\s{1}$ (also \s{0.1}, \s{5}); energy cut 20--200 keV; all four quadrants combined.\\
+Spectra & \texttt{sp\_common.synth.stellar\_spectra(n\_normal=500, n\_anomalous=10)}: emission-line, extra-trough and cosmic-ray anomalies.\\
+Real data (strongly recommended) & An AstroSat CZTI level-2 event file (quadrant extensions Q0--Q3 with TIME and ENERGY columns, as in your session notebook) from the ISSDC archive, or a Fermi GBM time-tagged-event file (HEASARC), for a known GRB and for a quiet interval.
+\end{simtable}
+
+\section*{Your Task}
+\begin{tasks}
+  \item \textbf{From events to a light curve (Stage 2).} Bin the event list (with the energy cut and all quadrants), plot counts, rate and the energy--time scatter. Characterise the background: mean rate, Fano factor in the burst-free part, slow drift.
+  \item \textbf{n-sigma baseline detector.} Estimate the baseline with a running median (window $\ge$ 20 s), compute $z_j$, flag exceedances for $n=3,4,5$, and compare the number of false exceedances in the burst-free part with the Gaussian and Poisson expectations. Report the detection of the injected burst (bins above threshold, start and stop).
+  \item \textbf{DBSCAN grouping.} Cluster the exceedance bins in standardised (time, significance) space. Choose $m_{\min}$ and $\epsilon$ from the $k$-distance plot, extract the clusters, and report for each its start, stop, peak significance and number of bins. Perform a grid sweep over ($\epsilon,m_{\min}$) using injections and show where the burst is found, split or merged with noise.
+  \item \textbf{Several detectors, one yardstick.} Implement (a) a run-length detector (at least $k$ consecutive bins above $n\sigma$), (b) the DBSCAN pipeline, (c) an Isolation Forest on sliding-window features (mean, standard deviation, slope, maximum of 10-s windows) and (d) a PCA reconstruction-error detector on the same windows (trained on a burst-free stretch). Calibrate each threshold on the 500 null light curves for one false alarm per 100 curves (Wilson interval), then measure the efficiency of each on 200 injections at each \texttt{amp}. Plot efficiency versus injected strength (peak counts, or fluence in counts).
+  \item \textbf{Spectral anomalies.} Apply PCA reconstruction error and Isolation Forest to \texttt{stellar\_spectra}; report average precision, the recall at a fixed budget of 20 flagged spectra, and the recall per anomaly type. Explain why each method misses some types (cosmic-ray spikes versus broad troughs).
+  \item \textbf{Threshold calibration.} Fit the tail of each detector's null-score distribution, extrapolate to a rate of one false alarm per day of data, discuss the validity of the extrapolation and the trials factor from several bin widths ($0.1,1,\s{5}$).
+  \item \textbf{Real data.} Run the best detector on a real event file: report each candidate with its start time, duration, peak significance and a p-value from the null calibration, plot the candidate with its background, and compare with the published burst time and duration (GCN or CZTI/GBM catalogue). Close with an honest verdict (detected, marginal, not detected) as in the final stage of your session pipeline.
+\end{tasks}
+
+\begin{checkpoint}
+For a Gaussian background the one-sided tail probabilities are $1.35\times10^{-3}$ ($3\sigma$), $3.2\times10^{-5}$ ($4\sigma$), $2.9\times10^{-7}$ ($5\sigma$): about $0.4$, $0.01$ and $9\times10^{-5}$ false exceedances in the 300 one-second bins. For the Isolation Forest the normalisation $c(n)$ of Eq.~\eqref{eq:iso} is about $10.2$ for $n=256$. DBSCAN assigns label $-1$ to noise. The injected burst at \texttt{amp=300} must be recovered with efficiency $\approx1$ by all detectors; the detectors differ near \texttt{amp}$=10$--$30$.
+\end{checkpoint}
+
+\section*{Aerospace Application Link}
+A burst monitor in orbit has limited processing and a downlink that cannot carry all photon data. The onboard trigger runs a rate-excess search on several timescales; only triggered data is transmitted at full resolution. From your efficiency curves state the faintest burst (counts above background) detectable at one false trigger per day at each timescale, the data-volume saving obtained by downlinking only triggered intervals (assume photon records of 8 bytes and your measured event rate), and how the number of timescales changes the trials factor and the threshold.
+
+\section*{Deliverables}
+\begin{delivs}
+  \item[D1] \textbf{Light curve and background:} binning code, background characterisation.
+  \item[D2] \textbf{n-sigma detector:} exceedance counts versus theory and the burst detection.
+  \item[D3] \textbf{DBSCAN pipeline:} $k$-distance plot, clusters, the ($\epsilon,m_{\min}$) sensitivity map.
+  \item[D4] \textbf{Detector comparison:} efficiency-versus-strength curves at calibrated false-alarm rate for the four detectors with confidence intervals; spectral anomaly results.
+  \item[D5] \textbf{Calibration and real data:} threshold extrapolation with trials factor and the real-data candidate table with verdict.
+  \item[D6] \textbf{Memo (300 words):} ``What can this detector find, and how often will it lie?'' Report the sensitivity and false-alarm rate with uncertainties. Cite at least two external sources.
+  \item[Bonus] (a) Add a Bayesian-blocks segmentation and compare burst duration estimates. (b) Replace the running median by a Gaussian-process background. (c) Use the energy information: search in two energy bands and test the hardness of the candidate.
+\end{delivs}
+
+\section*{Learning Resources}
+\resourcegroup{Clustering and Anomaly Detection}
+\begin{resources}
+  \item Ester, M., Kriegel, H.-P., Sander, J., Xu, X. (1996). ``A density-based algorithm for discovering clusters in large spatial databases with noise.'' Proc.\ KDD-96, 226.
+  \item Liu, F.T., Ting, K.M., Zhou, Z.-H. (2008). ``Isolation forest.'' Proc.\ IEEE ICDM, 413.
+  \item Chandola, V., Banerjee, A., Kumar, V. (2009). ``Anomaly detection: a survey.'' ACM Computing Surveys 41, 15.
+  \item scikit-learn user guide: clustering and outlier detection, \url{https://scikit-learn.org/stable/modules/outlier_detection.html}
+\end{resources}
+\resourcegroup{Burst Astronomy}
+\begin{resources}
+  \item Bhalerao, V.\ et al.\ (2017). ``The Cadmium Zinc Telluride Imager on AstroSat.'' J.\ Astrophys.\ Astron.\ 38, 31.
+  \item Meegan, C.\ et al.\ (2009). ``The Fermi Gamma-ray Burst Monitor.'' Astrophys.\ J.\ 702, 791.
+  \item AstroSat data (ISSDC): \url{https://astrobrowse.issdc.gov.in/astro_archive/archive/Home.jsp}; Fermi GBM data (HEASARC): \url{https://heasarc.gsfc.nasa.gov}
+\end{resources}
+\resourcegroup{Tools}
+\begin{resources}
+  \item Astropy FITS I/O: \url{https://docs.astropy.org/en/stable/io/fits/}; scikit-learn \texttt{DBSCAN}, \texttt{IsolationForest}, \texttt{PCA}.
+\end{resources}
+
+\evaluation
+\end{document}

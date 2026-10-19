@@ -1,0 +1,127 @@
+%% META id=02
+%% META slug=02_sampling_aliasing_and_reconstruction
+%% META title=Sampling, Aliasing and Reconstruction
+%% META part=A
+%% META level=1
+%% META effort=8--12 hours
+%% META prereq=Problem 01, trigonometry
+%% META theory=Impulse sampling, spectral replication, Nyquist theorem, aliasing, sinc reconstruction, zero-order hold, bandpass sampling, aperture jitter
+%% META skills=Dense-grid simulation of analog signals, alias prediction, interpolation, anti-alias filter selection, jitter Monte Carlo
+\documentclass[11pt,a4paper]{article}
+\usepackage{spl}
+\begin{document}
+\splheader{02}{Sampling, Aliasing and Reconstruction}{Part A: Foundations \quad Level 1}%
+{Sampling Theory, Aliasing, Interpolation, Bandpass Sampling, Clock Jitter}%
+{Problem 01, trigonometry}{8--12 hours}
+
+\begin{summarybox}{Sampling, Aliasing and Reconstruction: What a Computer Can and Cannot Know About a Signal}
+Sampling throws away everything between the samples. The Nyquist--Shannon theorem says when nothing is lost and tells you exactly what goes wrong when it is. Predict aliases by hand, reconstruct signals by sinc interpolation, undersample a radio signal on purpose, and compute how much clock jitter an ADC can tolerate.
+\end{summarybox}
+
+\generalinstructions{02\_sampling\_aliasing\_and\_reconstruction}
+
+\section*{Background and Motivation}
+A flight computer sees the world only at the instants of its sampling clock. If a reaction wheel vibrates at \Hz{130} and the gyroscope is read at \Hz{100}, the control software does not see a \Hz{130} vibration: it sees a \Hz{30} wobble that is not there. Aliasing is irreversible; once a signal has been sampled badly, no later processing can tell the true frequency from the false one. The only defences are to sample fast enough, or to remove the offending frequencies \emph{before} sampling with an analog anti-alias filter.
+
+In this problem you simulate the ``analog'' world on a very dense time grid, sample it, and compare. You will derive the spectral picture of sampling, predict aliased frequencies with a formula, reconstruct a signal from its samples, learn why bandpass signals can legitimately be sampled below twice their highest frequency, and finally quantify the limit that sampling-clock jitter places on the dynamic range of any ADC.
+
+\section*{Theoretical Framework}
+\subsection{Impulse Sampling and Spectral Replication}
+Sampling $x(t)$ at $t=nT_s$ is multiplication by an impulse train; in the frequency domain it is convolution with an impulse train in frequency, which \emph{replicates} the spectrum:
+\begin{equation}
+  X_s(f)=f_s\sum_{k=-\infty}^{\infty}X(f-kf_s).
+  \label{eq:replica}
+\end{equation}
+If $X(f)=0$ for $|f|>f_{\max}$ and $f_s>2f_{\max}$, the replicas do not overlap and a low-pass filter recovers $X(f)$ exactly. If $f_s<2f_{\max}$ they overlap and the overlap cannot be undone.
+
+\subsection{Aliasing}
+A sinusoid of frequency $f$ sampled at $f_s$ is indistinguishable from one at $f-kf_s$ for every integer $k$. The apparent frequency in $[0,f_s/2]$ is
+\begin{equation}
+  f_{\rm alias}=\left|f-f_s\,\mathrm{round}\!\left(\frac{f}{f_s}\right)\right| .
+  \label{eq:alias}
+\end{equation}
+Plotted against $f$ this is a triangle wave (``folding diagram''). Frequencies that are exact multiples of $f_s$ alias to DC and appear as a constant offset.
+
+\subsection{Reconstruction}
+For a band-limited signal sampled above the Nyquist rate the ideal reconstruction is
+\begin{equation}
+  x(t)=\sum_{n}x[n]\,\sinc\!\left(\frac{t-nT_s}{T_s}\right),\qquad \sinc(u)=\frac{\sin\pi u}{\pi u}.
+  \label{eq:sinc}
+\end{equation}
+It is non-causal and infinite; practical converters use a zero-order hold (ZOH), whose frequency response $H_{\rm ZOH}(f)=\sinc(f/f_s)\,\ee^{-\jj\pi f/f_s}$ droops towards the Nyquist frequency and passes images of the spectrum that must be removed by an analog reconstruction filter.
+
+\subsection{Bandpass Sampling}
+A signal occupying only $f_L<|f|<f_H$ with bandwidth $B=f_H-f_L$ may be sampled below $2f_H$ without aliasing damage provided the replicas interleave without overlapping, i.e.\ for some integer $k$ with $1\le k\le\lfloor f_H/B\rfloor$,
+\begin{equation}
+  \frac{2f_H}{k}\le f_s\le\frac{2f_L}{k-1}\qquad(\text{no upper limit for }k=1).
+  \label{eq:bandpass}
+\end{equation}
+Even-numbered replicas are spectrally inverted, which software must undo.
+
+\subsection{Aperture Jitter}
+If the sampling instants have random error $\sigma_t$ (RMS), a full-scale sinusoid of frequency $f$ is sampled with an effective amplitude error $2\pi f\sigma_t$ (relative), so the jitter-limited signal-to-noise ratio is
+\begin{equation}
+  \mathrm{SNR}_{\rm jitter}=-20\log_{10}\!\left(2\pi f\,\sigma_t\right)\ \si{\decibel}.
+  \label{eq:jitter}
+\end{equation}
+
+\section*{Data and Simulation Specification}
+\begin{simtable}
+Dense grid & ``Analog'' time grid at $f_{\rm dense}=\kHz{100}$ (or higher); sample by taking every $(f_{\rm dense}/f_s)$-th point. Always state which frequencies are in $\si{\hertz}$.\\
+Test signals & Single tones; the two-tone signal of the session notebook ($3$ and $\Hz{7}$); a tone at \Hz{13} sampled at $f_s\in\{20,16,10\}\,\mathrm{Hz}$; a \Hz{130} tone read at \Hz{100}.\\
+Bandpass case & Band $\MHz{70}$--$\MHz{80}$ ($B=\MHz{10}$), test tone at \MHz{74}; candidate $f_s=20,23,25,28,30,33\,\mathrm{MHz}$.\\
+Jitter & Gaussian timing error $\sigma_t\in\{1,10,100\}\,\mathrm{ps}$, tones at $10,100,\MHz{1000}$, $10^6$ samples.\\
+Real data (choose one) & (i) Phyphox accelerometer of a smartphone placed on a running washing machine or fan: record at the highest rate, then deliberately \emph{downsample without filtering} by factors $2,4,8$ and observe the aliased peaks. (ii) Kepler long-cadence photometry (cadence $\SI{29.4}{\minute}$, Nyquist $\SI{283}{\micro\hertz}$) of a pulsating star from the MAST archive via \texttt{lightkurve}, compared with the short-cadence ($\SI{58.9}{\second}$) light curve of the same star where available.
+\end{simtable}
+
+\section*{Your Task}
+\begin{tasks}
+  \item \textbf{Spectral replication (Stage 2).} Sample a band-limited signal at $f_s=100$, $50$ and $\Hz{25}$ from a dense grid and plot the magnitude spectra on a wide frequency axis (computed from the dense, zero-padded samples). Show the replicas of Eq.~\eqref{eq:replica} and the onset of overlap.
+  \item \textbf{Alias prediction.} Implement Eq.~\eqref{eq:alias}. Build the folding diagram (apparent versus true frequency, $0$--$3f_s$). Predict by hand and then confirm numerically the apparent frequency of the \Hz{13} tone at $f_s=20,16,10\,\mathrm{Hz}$ and of the \Hz{130} tone at \Hz{100}. Show that a tone at exactly $f_s$ looks like a constant.
+  \item \textbf{Reconstruction.} Reconstruct the two-tone signal from its samples with Eq.~\eqref{eq:sinc}, with linear interpolation and with a zero-order hold. Plot the RMS error against the oversampling ratio $f_s/(2f_{\max})$ and against the number of sinc terms kept. Explain the edge effects of a finite record.
+  \item \textbf{Anti-alias filtering.} Add an out-of-band interferer of amplitude $0.5$ at \kHz{3.7} to a \Hz{200} tone and sample at \kHz{2}. Show the alias, then design a Butterworth analog pre-filter (simulate it on the dense grid) that suppresses the interferer by at least \dB{40} before sampling. State the order needed and the passband droop it causes at \Hz{200}.
+  \item \textbf{Zero-order hold.} Compute and verify numerically the ZOH droop at $f_s/4$ and $f_s/2$. Reconstruct a \kHz{1} sine from $f_s=\kHz{8}$ samples with a ZOH and show the spectral images.
+  \item \textbf{Bandpass sampling.} Evaluate Eq.~\eqref{eq:bandpass} for the $70$--$\MHz{80}$ band and list all valid $f_s$ ranges. Simulate sampling at each candidate rate, locate the apparent frequency of the \MHz{74} tone and state for which candidates it is spectrally inverted.
+  \item \textbf{Clock jitter.} Simulate jittered sampling, measure the SNR and compare with Eq.~\eqref{eq:jitter} on a plot of SNR versus $\sigma_t$ for each tone frequency. Convert the SNR into effective bits using $\mathrm{ENOB}=(\mathrm{SNR}-1.76)/6.02$.
+  \item \textbf{Real data.} Analyse your recording or the Kepler data: identify peaks that move when you change the sampling rate (these are aliases) and peaks that do not (these are real). Report which frequencies you trust.
+\end{tasks}
+
+\begin{checkpoint}
+Apparent frequency of the \Hz{13} tone: $\Hz{7}$ at $f_s=20$, $\Hz{3}$ at $f_s=16$ and $\Hz{3}$ at $f_s=10$; the \Hz{130} tone read at \Hz{100} appears at \Hz{30}. For the $70$--$\MHz{80}$ band the valid rates include $f_s=\MHz{33}$ ($k=5$) and $f_s=\MHz{28}$ ($k=6$ requires $26.7\le f_s\le28$) but \emph{not} $25$ or \MHz{30}. ZOH droop is $\dB{-0.91}$ at $f_s/4$ and $\dB{-3.92}$ at $f_s/2$. A $10$\,MHz tone with $\sigma_t=\SI{10}{\pico\second}$ jitter has $\mathrm{SNR}\approx\dB{64}$ (about $10.3$ effective bits).
+\end{checkpoint}
+
+\section*{Aerospace Application Link}
+Reaction wheels, cryocoolers and pumps radiate microvibration at frequencies that depend on their speed. For a gyroscope sampled at $f_s=\Hz{100}$ compute, for a wheel spinning from 0 to $6000\,\mathrm{rpm}$, the apparent frequency of the fundamental and the first three harmonics, and plot it against wheel speed. Identify the wheel speeds at which a harmonic aliases to \emph{zero frequency} (indistinguishable from a constant gyro bias) and those at which it falls on a structural mode at \Hz{12}. Propose a sampling-rate or filter change that removes the problem and compute its cost in data rate.
+
+\section*{Deliverables}
+\begin{delivs}
+  \item[D1] \textbf{Replication notebook:} dense-grid sampling and the three spectra with replicas annotated.
+  \item[D2] \textbf{Alias study:} folding diagram, the predicted versus measured alias table and the DC-alias demonstration.
+  \item[D3] \textbf{Reconstruction study:} sinc, linear and ZOH reconstruction errors versus oversampling ratio, plus the ZOH droop check.
+  \item[D4] \textbf{Anti-alias and bandpass study:} the filter design with attenuation plot, and the table of valid bandpass sampling rates with inversion flags.
+  \item[D5] \textbf{Jitter and real data:} SNR versus jitter plot with the theory curve, and the real-data alias analysis.
+  \item[D6] \textbf{Memo (250 words):} ``Why does the reaction-wheel vibration appear as a bias, and what do we change?'' Cite at least two external sources.
+  \item[Bonus] (a) Show that non-uniform (random) sampling avoids aliasing at the cost of a noise floor, and compute its spectrum. (b) Estimate the frequency of a tone sampled \emph{below} Nyquist using two different sampling rates (Chinese-remainder idea). (c) Hardware: sample a function generator with a microcontroller ADC at several rates and reproduce your folding diagram.
+\end{delivs}
+
+\section*{Learning Resources}
+\resourcegroup{Sampling Theory}
+\begin{resources}
+  \item Oppenheim, A.V., Schafer, R.W. \emph{Discrete-Time Signal Processing}, Ch.~4 (sampling of continuous-time signals).
+  \item Shannon, C.E. (1949). ``Communication in the presence of noise.'' Proc.\ IRE 37, 10.
+  \item Nyquist, H. (1928). ``Certain topics in telegraph transmission theory.'' Trans.\ AIEE 47, 617.
+  \item Vaughan, R.G., Scott, N.L., White, D.R. (1991). ``The theory of bandpass sampling.'' IEEE Trans.\ Signal Process.\ 39, 1973.
+\end{resources}
+\resourcegroup{Converters and Practice}
+\begin{resources}
+  \item Kester, W. (ed.) \emph{Data Conversion Handbook}, Analog Devices (sections on aperture jitter and anti-alias filtering); free from the Analog Devices website.
+  \item Lyons, R.G. \emph{Understanding Digital Signal Processing}, Ch.~2 (periodic sampling).
+\end{resources}
+\resourcegroup{Data and Tools}
+\begin{resources}
+  \item Phyphox: \url{https://phyphox.org}; MAST archive and Lightkurve: \url{https://archive.stsci.edu}, \url{https://lightkurve.github.io/lightkurve/}
+  \item SciPy \texttt{scipy.signal} (\texttt{butter}, \texttt{freqs}, \texttt{resample\_poly}): \url{https://docs.scipy.org/doc/scipy/reference/signal.html}
+\end{resources}
+
+\evaluation
+\end{document}

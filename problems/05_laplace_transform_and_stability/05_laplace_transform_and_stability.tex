@@ -1,0 +1,113 @@
+%% META id=05
+%% META slug=05_laplace_transform_and_stability
+%% META title=Laplace Transform, Poles and Stability
+%% META part=B
+%% META level=2
+%% META effort=10--14 hours
+%% META prereq=Problems 03, 04
+%% META theory=Laplace transform and ROC, transfer functions, poles and zeros, second-order step response, Routh--Hurwitz, Bode plots, PD attitude control
+%% META skills=Symbolic transforms with SymPy, pole-zero analysis, step-response metrics, Routh array code, Bode plotting, system identification from a ringing record
+\documentclass[11pt,a4paper]{article}
+\usepackage{spl}
+\begin{document}
+\splheader{05}{Laplace Transform, Poles and Stability}{Part B: Mathematics of Signals and Systems \quad Level 2}%
+{Laplace Transform, Transfer Functions, Pole-Zero Analysis, Stability, Bode Plots, Attitude Control}%
+{Problems 03, 04}{10--14 hours}
+
+\begin{summarybox}{Laplace Transform, Poles and Stability: Reading a System from Its Poles}
+The location of a handful of complex numbers, the poles, determines whether a system rings, settles, or runs away. Compute Laplace transforms by hand and symbolically, link pole positions to time responses, derive the step-response formulas of the second-order system, test stability with the Routh--Hurwitz criterion, draw Bode plots, and design a PD controller for a satellite.
+\end{summarybox}
+
+\generalinstructions{05\_laplace\_transform\_and\_stability}
+
+\section*{Background and Motivation}
+Fourier analysis describes steady-state sinusoidal behaviour; the Laplace transform adds the \emph{transient}: it covers growth and decay as well as oscillation, handles initial conditions, and turns linear differential equations into algebra. A satellite attitude loop, an RC filter and an op-amp circuit are all rational functions of $s$, and the design questions (is it stable? how fast? how much overshoot?) become questions about where the poles lie.
+
+This problem develops the toolbox a signals engineer needs before designing analog filters (problem 08) and digital filters (problems 14--15): transform pairs, pole-zero reading, standard second-order formulas, the Routh test, and Bode plots, with an attitude-control example from aerospace.
+
+\section*{Theoretical Framework}
+\subsection{Laplace Transform and ROC}
+For a causal signal, $X(s)=\int_{0^-}^{\infty}x(t)\ee^{-st}\dd t$ with $s=\sigma+\jj\omega$. Useful pairs: $\delta(t)\to1$; $u(t)\to1/s$; $\ee^{-at}u(t)\to1/(s+a)$ with region of convergence (ROC) $\Re s>-a$; $t\ee^{-at}u(t)\to1/(s+a)^2$; $\sin(\omega_0t)u(t)\to\omega_0/(s^2+\omega_0^2)$. Differentiation obeys $\dot x\to sX(s)-x(0^-)$; convolution becomes $Y=HX$. The same $X(s)$ with a different ROC is a different (for example anti-causal) signal, so the ROC is part of the answer. The Fourier transform is $X(s)$ on the imaginary axis if it lies in the ROC. Initial and final value theorems: $x(0^+)=\lim_{s\to\infty}sX$, $x(\infty)=\lim_{s\to0}sX$ (if the latter exists).
+
+\subsection{Poles, Zeros and Stability}
+For a rational $H(s)=K\prod(s-z_i)/\prod(s-p_i)$ a pole at $p=\sigma+\jj\omega$ contributes a term $\ee^{\sigma t}\cos(\omega t+\phi)$ to the impulse response. A causal LTI system is BIBO stable if and only if all poles lie in the open left half-plane. The Routh--Hurwitz array tests this without computing roots: for $a_ns^n+\dots+a_0$, build rows from the coefficients; the number of sign changes in the first column equals the number of right-half-plane roots.
+
+\subsection{Second-Order System}
+$H(s)=\omega_n^2/(s^2+2\zeta\omega_ns+\omega_n^2)$ has poles $s=-\zeta\omega_n\pm\jj\omega_n\sqrt{1-\zeta^2}$ and, for $0<\zeta<1$, the step response metrics
+\begin{equation}
+  M_p=\exp\!\left(-\frac{\pi\zeta}{\sqrt{1-\zeta^2}}\right),\qquad
+  t_p=\frac{\pi}{\omega_d},\qquad
+  t_s^{(2\%)}\approx\frac{4}{\zeta\omega_n},
+  \label{eq:2nd}
+\end{equation}
+and the frequency response peaks at $\omega_r=\omega_n\sqrt{1-2\zeta^2}$ with $M_r=1/(2\zeta\sqrt{1-\zeta^2})$ for $\zeta<1/\sqrt2$.
+
+\subsection{Bode Plots}
+Evaluate $H(\jj\omega)$ and plot $20\log_{10}|H|$ and $\angle H$ against $\log\omega$. Each real pole contributes $-\SI{20}{\decibel}$ per decade beyond its corner and $-45^\circ$ phase at the corner; each zero the opposite. The $-3\,\mathrm{dB}$ bandwidth of a first-order low-pass $1/(1+s/\omega_c)$ is $\omega_c$.
+
+\subsection{Satellite Attitude Control}
+A rigid satellite about one axis obeys $J\ddot\theta=\tau$, i.e.\ $P(s)=1/(Js^2)$ (two poles at the origin: marginally unstable). A proportional--derivative controller $\tau=K_p(\theta_c-\theta)-K_d\dot\theta$ gives the closed loop
+\begin{equation}
+  \frac{\theta(s)}{\theta_c(s)}=\frac{K_p}{Js^2+K_ds+K_p},\qquad
+  \omega_n=\sqrt{K_p/J},\ \ \zeta=\frac{K_d}{2\sqrt{K_pJ}}.
+  \label{eq:pd}
+\end{equation}
+
+\section*{Data and Simulation Specification}
+\begin{simtable}
+Systems & $H_1=1/(s^2+3s+2)$, $H_2=1/(s^2+2s+5)$, $H_3=1/(s^2-s+2)$, $H_4=1/(s^2+0.2s+9)$, $H_5=(s+1)/(s^2+s+6)$.\\
+Characteristic equation & $s^3+6s^2+11s+6+K=0$ for the Routh task (loop $L(s)=K/((s+1)(s+2)(s+3))$).\\
+Satellite & Moment of inertia $J=\SI{10}{\kilo\gram\metre\squared}$; target $\omega_n=\SI{0.3}{\radian\per\second}$, $\zeta=0.7$; $30^\circ$ slew; measurement delay swept from $0$ to \s{2}.\\
+Tools & \texttt{scipy.signal} (\texttt{step}, \texttt{impulse}, \texttt{bode}, \texttt{residue}, \texttt{tf2zpk}), SymPy for symbolic transforms.\\
+Real data & The ruler-twang accelerometer record of problem 03 (or a swinging pendulum filmed or logged with Phyphox): fit $\omega_n$ and $\zeta$ and place the poles in the $s$-plane.
+\end{simtable}
+
+\section*{Your Task}
+\begin{tasks}
+  \item \textbf{Transforms by hand and symbolically (Stage 2).} Derive the Laplace transforms of the pairs in Section~1 by integration, then confirm them with SymPy (\texttt{laplace\_transform}). Invert $H_1(s)$ and $H_5(s)$ by partial fractions by hand, check with \texttt{scipy.signal.residue}, and compare the resulting impulse response with a numerical one.
+  \item \textbf{Poles and responses.} For $H_1,\dots,H_5$ plot the pole-zero map and the impulse and step responses side by side. State, for each, the decay rate, oscillation frequency and stability. Demonstrate that the same $X(s)=1/(s+1)$ with ROC $\Re s>-1$ and $\Re s<-1$ corresponds to $\ee^{-t}u(t)$ and $-\ee^{-t}u(-t)$.
+  \item \textbf{Second-order metrics.} Derive Eq.~\eqref{eq:2nd} for $M_p$ and $t_p$. For $\zeta$ from $0.05$ to $0.99$ extract the overshoot and the $2\%$ settling time numerically from \texttt{scipy.signal.step}, and plot them with the formulas. Draw the region of the $s$-plane that satisfies $M_p<10\%$ and $t_s<\s{4}$.
+  \item \textbf{Routh--Hurwitz.} Implement the Routh array as a function. Test it on random polynomials against \texttt{numpy.roots}. For the third-order characteristic equation find the range of $K$ for stability, the critical gain and the crossing frequency, and verify with a root-locus sweep.
+  \item \textbf{Bode plots.} Draw the asymptotic Bode plot of $H_4$ and of a cascade of two first-order stages by hand; compare with \texttt{scipy.signal.bode}. Verify $\omega_r$ and $M_r$ for $\zeta=0.3$ and show that the $-3\,\mathrm{dB}$ point of a first-order system is at its pole.
+  \item \textbf{Satellite attitude controller.} Choose $K_p$ and $K_d$ for the target $\omega_n,\zeta$ using Eq.~\eqref{eq:pd}, simulate the $30^\circ$ slew, and report overshoot and settling time. Model a measurement delay with a first-order Pad\'e approximation $\ee^{-sT_d}\approx(1-sT_d/2)/(1+sT_d/2)$, find the pole locations as the delay grows and the delay at which the loop goes unstable.
+  \item \textbf{Identification.} Fit $\omega_n$ and $\zeta$ of your measured ringing record with a nonlinear least-squares fit of Eq.~\eqref{eq:2nd}'s impulse response, compare with the logarithmic-decrement estimate from problem 03 and put the two poles in the $s$-plane with error bars.
+\end{tasks}
+
+\begin{checkpoint}
+Overshoot is $4.6\%$ for $\zeta=0.7$ and $16.3\%$ for $\zeta=0.5$. For $s^3+6s^2+11s+6+K$ the system is stable for $-6<K<60$, the critical gain is $K=60$ and the crossing frequency is $\omega=\sqrt{11}=3.317\,\mathrm{rad/s}$. For $\zeta=0.3$ the resonant peak is $M_r=1.747$ ($4.85\,\mathrm{dB}$). The attitude gains for the stated design are $K_p=J\omega_n^2=0.9\,\mathrm{N\,m/rad}$ and $K_d=2\zeta\omega_nJ=4.2\,\mathrm{N\,m\,s/rad}$.
+\end{checkpoint}
+
+\section*{Aerospace Application Link}
+Star trackers and gyros deliver attitude with a processing delay. With your Task~6 model, compute how much latency the $\zeta=0.7$ attitude loop tolerates before its damping falls below $0.3$ and before it goes unstable, and express it as a fraction of the closed-loop time constant $1/(\zeta\omega_n)$. State the maximum star-tracker latency (in seconds) that the design can accept, and what you would change (bandwidth or damping) if the tracker's latency were doubled.
+
+\section*{Deliverables}
+\begin{delivs}
+  \item[D1] \textbf{Transform notebook:} hand derivations, SymPy confirmations and partial-fraction inversions with numerical checks.
+  \item[D2] \textbf{Pole-zero gallery:} the five systems with maps, responses and written interpretation, plus the ROC demonstration.
+  \item[D3] \textbf{Second-order and Routh study:} overshoot and settling curves versus $\zeta$ with the $s$-plane specification region; the Routh function with tests and the critical-gain result.
+  \item[D4] \textbf{Bode study:} hand-drawn asymptotes next to computed plots, resonance check.
+  \item[D5] \textbf{Attitude controller:} the gains, slew simulation, delay-margin analysis and the system identification of the real ringing record.
+  \item[D6] \textbf{Memo (250 words):} ``How much sensor latency can the attitude loop tolerate?'' Cite at least two external sources.
+  \item[Bonus] (a) Plot the root locus of $L(s)=K/(s(s+2)(s+5))$ by hand rules and compare with \texttt{python-control}. (b) Derive the Laplace-domain model of an RLC circuit from its differential equation and confirm it by measurement. (c) Add torque saturation and show the integrator wind-up problem with an integral term.
+\end{delivs}
+
+\section*{Learning Resources}
+\resourcegroup{Laplace Transform and Systems}
+\begin{resources}
+  \item Oppenheim, A.V., Willsky, A.S. \emph{Signals and Systems}, Ch.~9 (Laplace transform).
+  \item Lathi, B.P. \emph{Linear Systems and Signals}, chapters on the Laplace transform and system response.
+  \item Nise, N.S. \emph{Control Systems Engineering}, Ch.~2--4 (modelling, time response) and Ch.~6 (stability, Routh--Hurwitz).
+\end{resources}
+\resourcegroup{Attitude Control}
+\begin{resources}
+  \item Wie, B. \emph{Space Vehicle Dynamics and Control} (single-axis attitude control).
+  \item Wertz, J.R. (ed.) \emph{Spacecraft Attitude Determination and Control} (sensors and their latency).
+\end{resources}
+\resourcegroup{Tools}
+\begin{resources}
+  \item SciPy signal, SymPy: \url{https://docs.scipy.org/doc/scipy/reference/signal.html}, \url{https://docs.sympy.org}
+  \item Python Control Systems Library (optional): \url{https://python-control.readthedocs.io}
+\end{resources}
+
+\evaluation
+\end{document}

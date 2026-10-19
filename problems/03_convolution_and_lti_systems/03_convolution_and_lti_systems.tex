@@ -1,0 +1,117 @@
+%% META id=03
+%% META slug=03_convolution_and_lti_systems
+%% META title=Complex Numbers, Convolution and LTI Systems
+%% META part=B
+%% META level=1
+%% META effort=10--14 hours
+%% META prereq=Problem 01
+%% META theory=Complex exponentials and phasors, linearity and time invariance, impulse response, convolution, BIBO stability, correlation, deconvolution
+%% META skills=Direct and matrix convolution, numerical LTI tests, system identification from an impulse response, correlation-based ranging, regularised deconvolution
+\documentclass[11pt,a4paper]{article}
+\usepackage{spl}
+\begin{document}
+\splheader{03}{Convolution and LTI Systems}{Part B: Mathematics of Signals and Systems \quad Level 1}%
+{Phasors, Linear Time-Invariant Systems, Convolution, Correlation, Deconvolution}%
+{Problem 01}{10--14 hours}
+
+\begin{summarybox}{Convolution and LTI Systems: One Impulse Response Predicts Every Output}
+Almost every sensor, structure, amplifier and filter you will meet behaves, to good approximation, as a linear time-invariant system. Such a system is completely described by its impulse response, and its output to \emph{any} input is a convolution. Build convolution from its definition, test systems for linearity and time invariance, identify a vibrating structure from a tap test, range a satellite with a spreading code by correlation, and learn why undoing a convolution is dangerous.
+\end{summarybox}
+
+\generalinstructions{03\_convolution\_and\_lti\_systems}
+
+\section*{Background and Motivation}
+When an engineer taps a wing panel with a hammer and records the accelerometer, the recorded ringing is the panel's impulse response. Knowing it, the response to engine vibration, gusts or a shock load can be \emph{computed} without any new experiment, because for a linear time-invariant (LTI) system the response to a sum of scaled and delayed impulses is the sum of scaled and delayed copies of the impulse response. That sum is the convolution. The same operation describes how a filter acts on data, how a telescope blurs a point source, and how a receiver correlates an incoming ranging code.
+
+The mathematics of this problem (complex exponentials, convolution, correlation) is the foundation for everything that follows: the Fourier, Laplace and $z$ transforms in problems 04--06 exist because convolution becomes multiplication in the transform domain. Do this problem slowly and verify each property numerically.
+
+\section*{Theoretical Framework}
+\subsection{Complex Exponentials and Phasors}
+Euler's formula $\ee^{\jj\theta}=\cos\theta+\jj\sin\theta$ lets a sinusoid be written $A\cos(\omega t+\phi)=\Re\{A\ee^{\jj\phi}\ee^{\jj\omega t}\}$. The complex number $A\ee^{\jj\phi}$ is the \emph{phasor}. Sinusoids of the same frequency add by adding phasors:
+\begin{equation}
+  \sum_k A_k\cos(\omega t+\phi_k)=\Re\Big\{\Big(\sum_kA_k\ee^{\jj\phi_k}\Big)\ee^{\jj\omega t}\Big\}.
+  \label{eq:phasor}
+\end{equation}
+Complex exponentials are the \emph{eigenfunctions} of LTI systems: $\ee^{\jj\omega t}\to H(\jj\omega)\,\ee^{\jj\omega t}$, which is why frequency response ($|H|$ and $\angle H$) fully characterises a sinusoidal steady state.
+
+\subsection{Linearity, Time Invariance, Causality, Stability}
+A system $\mathcal T\{\cdot\}$ is \emph{linear} if $\mathcal T\{ax_1+bx_2\}=a\mathcal T\{x_1\}+b\mathcal T\{x_2\}$, \emph{time-invariant} if a delayed input gives an equally delayed output, \emph{causal} if the output at $n$ depends only on inputs at times $\le n$, and \emph{BIBO stable} if every bounded input gives a bounded output. For an LTI system with impulse response $h[n]$:
+\begin{equation}
+  y[n]=\sum_{k=-\infty}^{\infty}x[k]\,h[n-k]=(x*h)[n],\qquad
+  \text{BIBO stable}\iff\sum_n|h[n]|<\infty,\qquad \text{causal}\iff h[n]=0\ (n<0).
+  \label{eq:conv}
+\end{equation}
+Convolution is commutative, associative and distributive. For finite sequences of lengths $N$ and $M$ the result has length $N+M-1$ and costs $\mathcal O(NM)$ operations; it can be written as multiplication by a Toeplitz matrix built from $h$.
+
+\subsection{Second-Order Mechanical System}
+A structural mode with natural frequency $\omega_n$ and damping ratio $\zeta<1$ has the impulse response
+\begin{equation}
+  h(t)=\frac{1}{m\omega_d}\,\ee^{-\zeta\omega_nt}\sin(\omega_dt),\qquad\omega_d=\omega_n\sqrt{1-\zeta^2}.
+  \label{eq:2nd}
+\end{equation}
+Successive peaks of the ringing decay by the \emph{logarithmic decrement} $\delta=\ln(x_k/x_{k+1})=2\pi\zeta/\sqrt{1-\zeta^2}$, so $\zeta=\delta/\sqrt{4\pi^2+\delta^2}$.
+
+\subsection{Correlation and Time-Delay Estimation}
+The cross-correlation $r_{xy}[m]=\sum_nx[n]\,y[n+m]$ peaks at the lag where $y$ is a delayed copy of $x$. A maximal-length (m-)sequence $c[n]\in\{\pm1\}$ of length $L=2^m-1$ has the periodic autocorrelation $L$ at zero lag and $-1$ at every other lag, which makes it an ideal ranging code (the GPS C/A code is a length-$1023$ Gold code at $\SI{1.023}{\mega chips\per\second}$, one chip lasting about $\SI{0.98}{\micro\second}$, i.e.\ \SI{293}{\metre}).
+
+\subsection{Deconvolution}
+If $y=h*x+n$ and $H(\omega)$ is small at some frequencies, the inverse filter $1/H$ amplifies the noise there without bound. A regularised inverse, $G(\omega)=H^\ast(\omega)/(|H(\omega)|^2+\lambda)$, trades resolution for noise gain.
+
+\section*{Data and Simulation Specification}
+\begin{simtable}
+Systems for Task 2 & (a) $y[n]=x[n]+x[n-1]$; (b) $y[n]=x[n]^2$; (c) $y[n]=n\,x[n]$; (d) $y[n]=x[-n]$; (e) $y[n]=|x[n]|$; (f) $y[n]=\tfrac13\sum_{k=0}^{2}x[n-k]$; (g) $y[n]=x[n]+1$; (h) $y[n]=1.1\,y[n-1]+x[n]$ (zero initial state).\\
+Structure & Mode with $f_n=\Hz{12}$, $\zeta=0.03$, $m=1$, sampled at \Hz{500}, 4 s record; input: unit impulse, then random broadband force.\\
+Ranging code & 10-stage m-sequence ($L=1023$) via \texttt{scipy.signal.max\_len\_seq(10)}; true delay $d=337.4$ samples (fractional); chip-rate sampling then $4\times$ oversampled; noise $-10$ to $+10\,\mathrm{dB}$ per-chip SNR.\\
+Deconvolution & Blur a pulse train with the structural response, add noise of $1\%$ of the peak.\\
+Real data & Tap a plastic ruler clamped over a table edge and record the smartphone accelerometer (Phyphox, highest rate) while it rings; use the recording as the measured impulse response in Task 3. Alternative: record a balloon pop with the microphone to obtain a room impulse response and convolve it with speech.
+\end{simtable}
+
+\section*{Your Task}
+\begin{tasks}
+  \item \textbf{Convolution from scratch (Stage 2).} Implement the convolution sum with explicit loops, with a vectorised NumPy version and as a Toeplitz matrix product. Check against \texttt{numpy.convolve} to machine precision, verify commutativity, associativity and distributivity numerically, and measure run time against $N$ and $M$ on log--log axes.
+  \item \textbf{Classify systems.} For each system (a)--(h) test linearity and time invariance numerically with random inputs and random shifts, decide causality and BIBO stability, and compute the impulse response for those that are LTI. Explain in one sentence why each failing system fails.
+  \item \textbf{Structural identification.} Simulate the structure with Eq.~\eqref{eq:2nd}, extract $\omega_n$ and $\zeta$ from the ringing via the logarithmic decrement and via a nonlinear least-squares fit, and compare. Predict the response to a random force by convolution and check it against \texttt{scipy.signal.lsim}. Repeat the extraction on your real ruler recording.
+  \item \textbf{Phasors and eigenfunctions.} Combine three sinusoids of equal frequency into a single phasor and verify Eq.~\eqref{eq:phasor}. Feed a sinusoid through a moving-average filter of length $M=5$ and show that the steady-state output is the same sinusoid scaled by $|H|=\left|\sin(\omega M/2)/(M\sin(\omega/2))\right|$ and delayed by $(M-1)/2$ samples.
+  \item \textbf{Correlation ranging.} Verify the autocorrelation property of the m-sequence. Estimate the delay of the noisy received code by cross-correlation, refine it to a fraction of a sample by parabolic interpolation of the peak, and plot the RMS delay error versus SNR (200 trials per point). Compare with ranging using a single sinusoid.
+  \item \textbf{Deconvolution.} Recover the pulse train from the blurred noisy record with the inverse filter, then with the regularised inverse for several $\lambda$. Plot the RMS error against $\lambda$ and explain the optimum.
+  \item \textbf{Stability.} Run system (h) with a bounded input and show the output diverges; compute $\sum|h[n]|$ for $h[n]=a^nu[n]$ as $a$ crosses 1.
+\end{tasks}
+
+\begin{checkpoint}
+Your convolution must agree with \texttt{numpy.convolve} to $<10^{-12}$. Systems (b), (c), (d), (e), (g) are not both linear and time-invariant ((d) is linear but not time-invariant; (e), (b) are not linear; (g) is not linear because of the constant; (c) is linear but not time-invariant); (a), (f), (h) are LTI and only (h) is unstable. The periodic autocorrelation of the length-1023 m-sequence is exactly $1023$ at lag $0$ and $-1$ elsewhere. For $\zeta=0.03$, $\delta\approx0.189$.
+\end{checkpoint}
+
+\section*{Aerospace Application Link}
+A GPS receiver measures the code delay of each satellite by correlation. One chip is about \SI{293}{\metre} of range, yet receivers reach metre-level code accuracy. Using your Task~5 results, plot the RMS ranging error (in metres, one chip = \SI{293}{\metre}) against per-chip SNR for chip-rate sampling and for $4\times$ oversampling with parabolic interpolation, and state the SNR needed for a \SI{3}{\metre} error. Then estimate how the \SI{1}{\milli\second} code period limits the coherent integration gain.
+
+\section*{Deliverables}
+\begin{delivs}
+  \item[D1] \textbf{Convolution notebook:} three implementations, property checks and timing plot.
+  \item[D2] \textbf{System classification table:} linearity, time-invariance, causality and stability tests for (a)--(h), with the numerical evidence.
+  \item[D3] \textbf{Structural identification:} impulse and random-force responses, parameter estimates by two methods, real ruler data.
+  \item[D4] \textbf{Phasor and eigenfunction demonstration} for the moving-average filter.
+  \item[D5] \textbf{Ranging and deconvolution:} delay-error curves with interpolation, and the regularised deconvolution error versus $\lambda$.
+  \item[D6] \textbf{Memo (250 words):} ``How accurate can code ranging be, and what limits it?'' Cite at least two external sources.
+  \item[Bonus] (a) Implement fast convolution by overlap-add using the FFT and find the crossover length. (b) Show that a cascade of $K$ identical moving averages approaches a Gaussian impulse response. (c) Estimate the room impulse response from a swept-sine recording and convolve it with speech.
+\end{delivs}
+
+\section*{Learning Resources}
+\resourcegroup{Signals and Systems}
+\begin{resources}
+  \item Oppenheim, A.V., Willsky, A.S. \emph{Signals and Systems}, Ch.~2 (LTI systems and convolution) and Ch.~3 (eigenfunctions).
+  \item Lathi, B.P. \emph{Linear Systems and Signals}, chapters on convolution and system response.
+  \item Smith, S.W. \emph{The Scientist and Engineer's Guide to Digital Signal Processing}, Ch.~6--7 (convolution, properties of convolution); \url{https://www.dspguide.com}.
+\end{resources}
+\resourcegroup{Ranging and Correlation}
+\begin{resources}
+  \item Kaplan, E.D., Hegarty, C.J. (eds.) \emph{Understanding GPS/GNSS: Principles and Applications} (code correlation and the C/A code).
+  \item Golomb, S.W. \emph{Shift Register Sequences} (m-sequences and their correlation properties).
+\end{resources}
+\resourcegroup{Tools}
+\begin{resources}
+  \item SciPy \texttt{scipy.signal} (\texttt{lsim}, \texttt{max\_len\_seq}, \texttt{correlate}): \url{https://docs.scipy.org/doc/scipy/reference/signal.html}
+  \item Phyphox: \url{https://phyphox.org}
+\end{resources}
+
+\evaluation
+\end{document}

@@ -1,0 +1,115 @@
+%% META id=14
+%% META slug=14_fir_filter_design
+%% META title=FIR Filter Design
+%% META part=D
+%% META level=2
+%% META effort=12--16 hours
+%% META prereq=Problems 06, 12
+%% META theory=FIR structure and linear phase, window method, Kaiser design formulas, Parks--McClellan equiripple design, filter types I--IV, differentiators and Hilbert transformers, fast FIR filtering, coefficient quantisation
+%% META skills=Windowed-sinc design, order estimation, equiripple design with SciPy, overlap-add filtering, band-pass design on real accelerometer data, fixed-point FIR
+\documentclass[11pt,a4paper]{article}
+\usepackage{spl}
+\begin{document}
+\splheader{14}{FIR Filter Design}{Part D: Digital Signal Processing \quad Level 2}%
+{Finite Impulse Response Filters, Linear Phase, Window and Equiripple Design, Fast Filtering}%
+{Problems 06, 12}{12--16 hours}
+
+\begin{summarybox}{FIR Filter Design: Always Stable, Perfectly Linear Phase, and Never Free}
+Design low-pass, band-pass, differentiating and Hilbert-transform FIR filters with the window method and with equiripple optimisation, predict the number of taps from the specification, filter long records with the FFT, quantise the coefficients for a fixed-point processor, and build a step counter from a smartphone accelerometer.
+\end{summarybox}
+
+\generalinstructions{14\_fir\_filter\_design}
+
+\section*{Background and Motivation}
+A finite impulse response filter computes each output as a weighted sum of the most recent $M$ inputs. It is unconditionally stable (no feedback), can have exactly linear phase (a pure delay, with no waveform distortion) and is easy to analyse. The price is length: a sharp transition needs tens or hundreds of taps, and those taps cost multiplications and delay.
+
+The design question is always the same: given a passband edge, stopband edge, ripple and attenuation, how many taps are needed and what are their values? You will answer it with analytic window methods, with Kaiser's design formulas, and with the optimal Parks--McClellan algorithm, then use the resulting filters on real data (counting steps from walking acceleration) and on the model of a flight-control sensor where the filter's group delay is part of the control loop.
+
+\section*{Theoretical Framework}
+\subsection{FIR Filters and Linear Phase}
+\begin{equation}
+  y[n]=\sum_{k=0}^{M-1}h[k]\,x[n-k],\qquad H(\ee^{\jj\omega})=\sum_{k=0}^{M-1}h[k]\ee^{-\jj\omega k}.
+  \label{eq:fir}
+\end{equation}
+If $h[k]=\pm h[M-1-k]$ the phase is linear and the group delay is the constant $(M-1)/2$ samples. Four types exist: I (symmetric, odd $M$), II (symmetric, even $M$; forced zero at $z=-1$, so no high-pass), III (antisymmetric, odd $M$; zeros at $z=\pm1$: differentiators and Hilbert transformers) and IV (antisymmetric, even $M$; zero at $z=1$).
+
+\subsection{Window Method}
+Truncate the ideal low-pass impulse response $h_d[n]=\sin(\omega_c(n-\alpha))/(\pi(n-\alpha))$, $\alpha=(M-1)/2$, with a window $w[n]$: $h[n]=h_d[n]w[n]$. The window fixes the stopband attenuation ($\approx21$ dB rectangular, $44$ Hann, $53$ Hamming, $74$ Blackman, measured at the first stopband ripple) and the transition width $\Delta f\approx\{0.9,\,3.1,\,3.3,\,5.5\}/M\cdot f_s$.
+
+\subsection{Kaiser Design}
+For an attenuation $A$ dB and a transition width $\Delta\omega$ (rad/sample),
+\begin{equation}
+  M-1\approx\frac{A-7.95}{2.285\,\Delta\omega},\qquad
+  \beta=\begin{cases}0.1102(A-8.7)&A>50\\0.5842(A-21)^{0.4}+0.07886(A-21)&21\le A\le50\\0&A<21\end{cases}
+  \label{eq:kaiser}
+\end{equation}
+and $w[n]=I_0\!\big(\beta\sqrt{1-(2n/(M-1)-1)^2}\big)/I_0(\beta)$.
+
+\subsection{Equiripple (Parks--McClellan)}
+The Remez exchange algorithm finds the type-I filter that minimises the maximum weighted error over the pass and stop bands; by the alternation theorem the optimal error curve equioscillates at least $r+2$ times. A common order estimate (Kaiser/Herrmann) is $M\approx\big(-10\log_{10}(\delta_p\delta_s)-13\big)/(14.6\,\Delta f/f_s)+1$.
+
+\subsection{Fast Filtering}
+Direct filtering costs $M$ multiplications per sample. For long filters, overlap-add with FFT blocks of size $N_{\rm fft}\ge L+M-1$ costs $\mathcal O(\log N_{\rm fft})$ per sample.
+
+\subsection{Coefficient Quantisation}
+Rounding the coefficients to $b$ bits perturbs the response; the stopband floor rises to about $-6\,b$ dB relative to the passband.
+
+\section*{Data and Simulation Specification}
+\begin{simtable}
+Specification A & $f_s=\kHz{1}$, passband edge \Hz{100}, stopband edge \Hz{200}, $A=\dB{60}$ stopband attenuation, passband ripple $<0.1$ dB.\\
+Windowed sinc & Cutoff \Hz{100}, $f_s=\kHz{1}$, $M=101$ taps with each of rectangular, Hann, Hamming, Blackman windows.\\
+Type tests & One filter of each linear-phase type; differentiator and Hilbert transformer with $M=31$ and $M=32$.\\
+Long record & $10^6$ samples of noise through a 1001-tap filter; block sizes $2^8$--$2^{16}$.\\
+Pedometer (real data) & Phyphox accelerometer log of about 60 s of walking with the phone in a trouser pocket or in the hand ($\approx100$ samples per second): use the magnitude $|\mathbf a|$, count your steps by hand as ground truth. Gait band $0.5$--$\Hz{3}$.\\
+Vibration (synthetic) & \texttt{sp\_common.synth.bearing\_vibration(fault="none")} plus an added low-frequency drift; use the IMU example with $f_s=\kHz{1}$, wanted band to \Hz{50}.
+\end{simtable}
+
+\section*{Your Task}
+\begin{tasks}
+  \item \textbf{Windowed-sinc design (Stage 2).} Implement the windowed-sinc low-pass from scratch for the four windows. Plot magnitude (dB) and phase, verify the constant group delay $(M-1)/2$, and measure transition width and peak stopband attenuation of each; compare with the figures in the theory section.
+  \item \textbf{Kaiser design.} Design Specification A with Eq.~\eqref{eq:kaiser}: compute $M$ and $\beta$ by hand, build the filter, and check it against the specification with a dense frequency grid; compare with \texttt{scipy.signal.kaiserord} and \texttt{firwin}. Report how often the first attempt fails and what you adjust.
+  \item \textbf{Equiripple design.} Design Specification A with \texttt{scipy.signal.remez}, find the smallest $M$ that meets $A=\dB{60}$ by bisection, plot the equiripple error and compare the number of taps and the maximum ripple with the Kaiser design. Explore the effect of the band weights.
+  \item \textbf{Linear-phase types.} Build one filter of each type I--IV, show their zero patterns and the forced zeros at $z=\pm1$ and explain which types can realise a high-pass or a band-stop. Design a differentiator and a Hilbert transformer, test them on sinusoids (the differentiator gain must be $\omega$, the Hilbert transformer must shift phase by $-90^\circ$) and compute the envelope of an AM signal.
+  \item \textbf{Fast filtering.} Implement overlap-add FIR filtering with FFT blocks and verify against \texttt{lfilter} on the long record. Plot run time versus block size and versus $M$; find the crossover with direct filtering. Compensate the group delay so that input and output align.
+  \item \textbf{Pedometer.} Design a band-pass FIR (Kaiser) for the gait band, apply it to your accelerometer magnitude, detect steps by peak picking with a minimum spacing, and compare with your hand count. Study how the number of taps and the band edges change delay, missed steps and false steps.
+  \item \textbf{Coefficient quantisation.} Quantise your Specification-A filter to $16$, $12$, $10$ and $8$ bits and plot the stopband degradation. Implement a bit-exact integer FIR (32-bit accumulator, saturation) and compare with floating point on a test signal; state the number of guard bits needed to avoid overflow for the filter's $\sum|h|$.
+\end{tasks}
+
+\begin{checkpoint}
+Specification A: the Kaiser formula gives $M-1\approx36.3$ (so $38$ taps; \texttt{kaiserord} returns $38$) with $\beta=5.653$; equiripple needs about $34$--$35$ taps for the same $\dB{60}$. A type-I filter of $M$ taps has group delay $(M-1)/2$ samples (here $\ms{19}$ for $M=39$ at $f_s=\kHz{1}$). Windowed-sinc stopband attenuations are about $21,\,44,\,53,\,74$ dB for rectangular, Hann, Hamming, Blackman.
+\end{checkpoint}
+
+\section*{Aerospace Application Link}
+A \kHz{1} accelerometer feeds a flight-control loop with a closed-loop crossover near \Hz{5}. The FIR filter of Specification A has $(M-1)/2=19$ samples of delay (\ms{19}), a phase lag of $360\times5\times0.019=34^\circ$ at crossover. Compute the phase margin you lose for each filter you designed (Kaiser, equiripple, a minimum-length filter you design with a relaxed specification), and recommend a design that keeps the phase loss below $10^\circ$ while attenuating the \Hz{150} structural vibration by at least \dB{40}. State what an IIR alternative (problem 15) would buy and what it would cost.
+
+\section*{Deliverables}
+\begin{delivs}
+  \item[D1] \textbf{Windowed-sinc notebook:} four designs with measured transition widths and attenuations versus the theory table.
+  \item[D2] \textbf{Kaiser and equiripple comparison:} order calculations, specification checks, tap-count comparison.
+  \item[D3] \textbf{Linear-phase types:} zero plots, the differentiator and Hilbert transformer tests.
+  \item[D4] \textbf{Fast filtering and quantisation:} the overlap-add implementation with timing, the coefficient-quantisation and fixed-point results.
+  \item[D5] \textbf{Pedometer:} designed filter, detected steps, hand count and error analysis.
+  \item[D6] \textbf{Memo (250 words):} ``Which filter for the control-loop accelerometer, and why?'' Cite at least two external sources.
+  \item[Bonus] (a) Implement the Remez exchange algorithm yourself and compare with SciPy. (b) Design a minimum-phase FIR from your linear-phase design by spectral factorisation and compare group delays. (c) Implement a polyphase FIR on a microcontroller.
+\end{delivs}
+
+\section*{Learning Resources}
+\resourcegroup{FIR Design}
+\begin{resources}
+  \item Oppenheim, A.V., Schafer, R.W. \emph{Discrete-Time Signal Processing}, Ch.~7 (filter design techniques: windowing, Kaiser, Parks--McClellan).
+  \item Parks, T.W., McClellan, J.H. (1972). ``Chebyshev approximation for nonrecursive digital filters with linear phase.'' IEEE Trans.\ Circuit Theory 19, 189.
+  \item Kaiser, J.F. (1974). ``Nonrecursive digital filter design using the $I_0$-sinh window function.'' Proc.\ IEEE Int.\ Symp.\ Circuits and Systems, 20.
+  \item Proakis, J.G., Manolakis, D.G. \emph{Digital Signal Processing}, Ch.~10 (design of digital filters).
+\end{resources}
+\resourcegroup{Practice}
+\begin{resources}
+  \item Lyons, R.G. \emph{Understanding Digital Signal Processing}, Ch.~5 (FIR filters).
+  \item Smith, S.W. \emph{The Scientist and Engineer's Guide to Digital Signal Processing}, Ch.~14--18 (windowed-sinc filters, FFT convolution); \url{https://www.dspguide.com}.
+\end{resources}
+\resourcegroup{Tools}
+\begin{resources}
+  \item SciPy \texttt{signal.firwin}, \texttt{signal.kaiserord}, \texttt{signal.remez}, \texttt{signal.oaconvolve}: \url{https://docs.scipy.org/doc/scipy/reference/signal.html}; Phyphox: \url{https://phyphox.org}
+\end{resources}
+
+\evaluation
+\end{document}

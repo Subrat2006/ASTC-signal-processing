@@ -1,0 +1,116 @@
+%% META id=07
+%% META slug=07_random_signals_and_noise_spectra
+%% META title=Random Signals, Noise and Power Spectral Density
+%% META part=B
+%% META level=2
+%% META effort=12--16 hours
+%% META prereq=Problems 01, 04
+%% META theory=Probability distributions, stationarity and ergodicity, autocorrelation, Wiener--Khinchin, filtering of random signals, AR processes, 1/f noise, Poisson counting statistics and detection thresholds
+%% META skills=Monte Carlo simulation, correlation estimators, PSD scaling, colored-noise synthesis, Poisson versus Gaussian false-alarm calculation, Fano-factor tests on real counts
+\documentclass[11pt,a4paper]{article}
+\usepackage{spl}
+\begin{document}
+\splheader{07}{Random Signals and Noise Spectra}{Part B: Mathematics of Signals and Systems \quad Level 2}%
+{Random Processes, Autocorrelation, Power Spectral Density, Colored Noise, Photon Counting Statistics}%
+{Problems 01, 04}{12--16 hours}
+
+\begin{summarybox}{Random Signals, Noise and Power Spectral Density: The Mathematics of Not Knowing}
+Noise is not ``junk to be removed''; it is a random process with a measurable correlation and spectrum, and every detection threshold is a statement about its tail. Estimate autocorrelations and spectra, shape noise with filters, generate and measure $1/f$ noise, and discover why a $3\sigma$ threshold on photon counts is not a $3\sigma$ threshold at all.
+\end{summarybox}
+
+\generalinstructions{07\_random\_signals\_and\_noise\_spectra}
+
+\section*{Background and Motivation}
+Every instrument record is a single realisation of a random process. To say that a feature is ``significant'' you must know the statistics of the background: its distribution, how correlated it is from one sample to the next, and how its power is spread across frequency. White Gaussian noise averages away like $1/\sqrt N$; correlated noise does not. A gamma-ray detector counts photons whose arrival times are Poisson, so its noise depends on the signal level itself, and at low count rates the Gaussian approximation underestimates the false-alarm rate by large factors.
+
+This problem builds the statistical vocabulary used by every later problem on filtering, detection and machine learning. The central objects are the autocorrelation, its Fourier transform (the power spectral density), and the Poisson distribution.
+
+\section*{Theoretical Framework}
+\subsection{Random Variables and Processes}
+A random process $x[n]$ is \emph{wide-sense stationary} if its mean and its autocorrelation $R_x[m]=\E\{x[n]x[n+m]\}$ do not depend on $n$; it is \emph{ergodic} if time averages over one long record converge to ensemble averages. For white noise of variance $\sigma^2$, $R_x[m]=\sigma^2\delta[m]$. By the central limit theorem sums of many independent contributions tend to a Gaussian.
+
+\subsection{Power Spectral Density}
+The Wiener--Khinchin theorem states that the PSD is the Fourier transform of the autocorrelation,
+\begin{equation}
+  S_x(f)=\sum_{m=-\infty}^{\infty}R_x[m]\,\ee^{-\jj2\pi fm/f_s}\,\frac1{f_s},\qquad
+  \sigma_x^2=R_x[0]=\int_{-f_s/2}^{f_s/2}S_x(f)\,\dd f,
+  \label{eq:wk}
+\end{equation}
+(two-sided, in units$^2$/Hz). White noise has the flat two-sided density $\sigma^2/f_s$, i.e.\ the one-sided density $2\sigma^2/f_s$. Passing a random signal through an LTI system $H$ gives $S_y(f)=|H(f)|^2S_x(f)$; for white input the output variance is $\sigma^2\sum_n h[n]^2$ and the equivalent noise bandwidth is $\mathrm{ENBW}=\int|H|^2\dd f/|H_{\max}|^2$.
+
+\subsection{AR(1) Process and Effective Sample Size}
+$x[n]=a\,x[n-1]+w[n]$ with white $w$ of variance $\sigma_w^2$ has
+\begin{equation}
+  R_x[m]=\frac{\sigma_w^2}{1-a^2}a^{|m|},\qquad S_x(f)=\frac{\sigma_w^2/f_s}{|1-a\ee^{-\jj2\pi f/f_s}|^2}.
+  \label{eq:ar1}
+\end{equation}
+The mean of $N$ samples of such a correlated process has variance of an effective number of independent samples $N_{\rm eff}\approx N(1-a)/(1+a)$.
+
+\subsection{$1/f$ Noise}
+Flicker noise has $S(f)\propto1/f^{\alpha}$ with $\alpha\approx1$; it can be synthesised by multiplying the spectrum of white noise by $f^{-\alpha/2}$. It does not average down (problems 01 and 09) and appears as a flat Allan deviation.
+
+\subsection{Poisson Counting}
+Photon (or event) counts in a bin of duration $\Delta t$ at rate $\lambda$ are Poisson distributed with mean and variance both equal to $\mu=\lambda\Delta t$. The variance-to-mean ratio (the Fano factor) is $1$; a Fano factor above $1$ indicates extra variability (drift, bursts, clustering). For large $\mu$ the Poisson tends to a Gaussian with $\sigma=\sqrt\mu$, but its upper tail is heavier. For a source of $N_s$ counts over a background of $N_b$ counts the signal-to-noise ratio is
+\begin{equation}
+  \mathrm{S/N}=\frac{N_s}{\sqrt{N_s+N_b}}.
+  \label{eq:poisson}
+\end{equation}
+
+\section*{Data and Simulation Specification}
+\begin{simtable}
+Distributions & Gaussian, uniform, Laplace and Poisson ($\mu=2,10,100$), $10^5$ samples; CLT test: sums of $1,2,4,8,16$ uniforms.\\
+AR(1) & $a=0.0,\,0.5,\,0.9,\,0.99$; $\sigma_w=1$; $N=2^{16}$; 500 realisations for ensemble averages.\\
+$1/f$ noise & Spectral exponent $\alpha=1$, $f_s=\Hz{100}$, $N=2^{18}$.\\
+Counts (synthetic) & \texttt{sp\_common.synth.grb\_event\_list(seed=7)}: event times of a burst on a drifting background (\Hz{250} nominal); bin at \s{0.1}, \s{1}, \s{10}; use the interval $t<\s{100}$ as ``background only''.\\
+Counts (real, choose one) & Fermi GBM time-tagged event data for a quiet interval or a burst (HEASARC), or an AstroSat CZTI level-2 event file; a TESS or Kepler light curve for photon-noise-limited flux.\\
+Tail probabilities & Poisson with mean 5 versus Gaussian $N(5,5)$ at the $+3\sigma$ threshold; Gaussian one-sided $3\sigma$ and $5\sigma$ for \Hz{1} bins over one day.
+\end{simtable}
+
+\section*{Your Task}
+\begin{tasks}
+  \item \textbf{Distributions and the CLT (Stage 2).} Sample the four distributions, verify mean and variance and plot histograms against the analytic densities. Show the sum of $k$ uniforms approaching a Gaussian via skewness and excess kurtosis and a Q--Q plot.
+  \item \textbf{Autocorrelation estimators.} Implement the biased ($1/N$) and unbiased ($1/(N-m)$) autocorrelation estimators. Compare white noise and AR(1) with the theory of Eq.~\eqref{eq:ar1}. Demonstrate ergodicity by comparing the time-average estimate of $R_x[1]$ from one long record with the ensemble average over 500 short records, and show a non-ergodic counterexample (random constant offset per realisation).
+  \item \textbf{Wiener--Khinchin.} Compute the PSD as the Fourier transform of the estimated autocorrelation and as the periodogram $|X[k]|^2/(Nf_s)$. Verify $\int S\,\dd f=\sigma^2$ and the one-sided scaling factor $2$. Show that the periodogram's scatter does \emph{not} shrink as $N$ grows and state its distribution (preview of problem 13).
+  \item \textbf{Filtering random signals.} Pass white noise through a moving average and through a first-order IIR. Verify $S_y=|H|^2S_x$, compute the output variance and the ENBW, and check the $1/M$ variance reduction for a moving average of white noise and the $N_{\rm eff}$ rule for AR(1) data.
+  \item \textbf{Colored noise.} Synthesise $1/f$ noise by spectral shaping and Brownian ($1/f^2$) noise by integration. Estimate the spectral slope on a log--log plot with a fitted line and confidence interval; compute the Allan deviation of each and relate its slope to the spectrum.
+  \item \textbf{Poisson statistics.} Simulate counts for $\mu=2,10,100$, compare histograms with the Poisson mass function and the Gaussian approximation, and compute the probability of exceeding $\mu+3\sqrt\mu$ in both. Quantify for $\mu=5$ the ratio of the true false-alarm probability to the Gaussian prediction.
+  \item \textbf{Real or synthetic counts.} Bin the event list at three widths. In the burst-free interval compute the Fano factor at each width; identify over-dispersion caused by the slow background drift and explain why it motivates detrending (problem 18). Compute $\mathrm{S/N}$ of the burst with Eq.~\eqref{eq:poisson}.
+\end{tasks}
+
+\begin{checkpoint}
+For AR(1) with $a=0.9$: $R_x[1]/R_x[0]=0.9$, $N_{\rm eff}=N/19$, and $S_x(0)=\sigma_w^2/(f_s(1-a)^2)$. For a moving average of $M$ white samples the variance drops by exactly $1/M$. For $\mu=5$ the Poisson probability of $N\ge12$ (the $+3\sigma$ threshold is $11.7$) is $0.0055$, about $4$ times the Gaussian $0.00135$. A one-sided $3\sigma$ threshold on \Hz{1} bins gives about $117$ false alarms per day, $5\sigma$ about $0.025$ per day.
+\end{checkpoint}
+
+\section*{Aerospace Application Link}
+Gamma-ray burst detectors trigger on count-rate excesses over a background of a few hundred counts per second. For a background of $266$ counts per \s{1} bin, the Gaussian $3\sigma$ threshold is $\approx314$ counts but the true Poisson false-alarm probability at that threshold differs from $0.00135$. Using your Task~6--7 results, find the threshold (in counts per bin) that gives at most one false trigger per day for a search over $1$-second bins, state the minimum burst fluence (extra counts) that is detectable at that threshold, and explain why a multi-timescale search (several bin widths) raises the number of independent trials.
+
+\section*{Deliverables}
+\begin{delivs}
+  \item[D1] \textbf{Distribution study:} histograms, moments and the CLT demonstration with Q--Q plots.
+  \item[D2] \textbf{Correlation and PSD study:} estimators, ergodicity test, Wiener--Khinchin verification with scaling checks.
+  \item[D3] \textbf{Filtered noise:} verification of $S_y=|H|^2S_x$, ENBW, variance reduction and $N_{\rm eff}$ for AR(1).
+  \item[D4] \textbf{Colored noise:} $1/f$ and Brownian synthesis, fitted slopes with confidence intervals, Allan deviations.
+  \item[D5] \textbf{Poisson study:} histograms, tail probabilities, the Fano-factor table and the count significance calculation.
+  \item[D6] \textbf{Memo (250 words):} ``Why is a $3\sigma$ threshold on photon counts not a $3\sigma$ threshold?'' Cite at least two external sources.
+  \item[Bonus] (a) Compute the exact distribution of the maximum of $N$ Gaussian samples and compare with Monte Carlo. (b) Derive the periodogram's $\chi^2_2$ distribution. (c) Implement the Li--Ma significance for on/off counting and compare with Eq.~\eqref{eq:poisson}.
+\end{delivs}
+
+\section*{Learning Resources}
+\resourcegroup{Random Signals and Spectra}
+\begin{resources}
+  \item Papoulis, A., Pillai, S.U. \emph{Probability, Random Variables and Stochastic Processes}, chapters on stochastic processes and spectral representation.
+  \item Oppenheim, A.V., Schafer, R.W. \emph{Discrete-Time Signal Processing}, Ch.~2.10 and Ch.~10 (random signals and power spectrum estimation).
+  \item Kay, S.M. \emph{Modern Spectral Estimation: Theory and Application} (AR models and spectral density).
+\end{resources}
+\resourcegroup{Counting Statistics and Astronomy Data}
+\begin{resources}
+  \item Li, T.-P., Ma, Y.-Q. (1983). ``Analysis methods for results in gamma-ray astronomy.'' Astrophys.\ J.\ 272, 317.
+  \item Fermi GBM data via HEASARC: \url{https://heasarc.gsfc.nasa.gov}; AstroSat data via the ISSDC archive: \url{https://astrobrowse.issdc.gov.in/astro_archive/archive/Home.jsp}
+\end{resources}
+\resourcegroup{Tools}
+\begin{resources}
+  \item NumPy random generators and SciPy stats: \url{https://numpy.org/doc/stable/reference/random/}, \url{https://docs.scipy.org/doc/scipy/reference/stats.html}
+\end{resources}
+
+\evaluation
+\end{document}

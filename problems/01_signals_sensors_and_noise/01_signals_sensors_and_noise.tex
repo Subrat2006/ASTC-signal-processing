@@ -1,0 +1,127 @@
+%% META id=01
+%% META slug=01_signals_sensors_and_noise
+%% META title=Signals, Sensors and Noise
+%% META part=A
+%% META level=1
+%% META effort=8--12 hours
+%% META prereq=Basic Python, high-school calculus
+%% META theory=Signal classes and measures (energy, power, RMS), decibels, sensor model, noise sources, averaging, Allan variance
+%% META skills=NumPy array handling, least-squares calibration, robust statistics, Allan deviation, reading a datasheet noise figure
+\documentclass[11pt,a4paper]{article}
+\usepackage{spl}
+\begin{document}
+\splheader{01}{Signals, Sensors and Noise}{Part A: Foundations \quad Level 1}%
+{Signal Measures, Sensor Models, Noise Statistics, Allan Deviation}%
+{basic Python, high-school calculus}{8--12 hours}
+
+\begin{summarybox}{Signals, Sensors and Noise: Characterise the Raw Data Before You Process It}
+Every flight computer, ground station and telescope starts with a sensor that turns a physical quantity into a noisy voltage. Build the vocabulary (RMS, power, decibels, SNR), model a real sensor with sensitivity, offset and noise, learn when averaging helps and when it stops helping, and measure a gyroscope's noise with the Allan deviation.
+\end{summarybox}
+
+\generalinstructions{01\_signals\_sensors\_and\_noise}
+
+\section*{Background and Motivation}
+A spacecraft never measures ``angular rate'' or ``temperature''. It measures a voltage, a count or a photon arrival time, and everything we call data is the output of a \emph{sensor model}: a physical quantity multiplied by a sensitivity, shifted by an offset, and corrupted by noise that has several different origins. Before any filter, transform or neural network is applied, an engineer must be able to answer three questions about the raw stream: how large is the signal, how large is the noise, and what kind of noise is it (white, drifting, impulsive)? The answers decide the sampling rate, the amplifier gain, the averaging time and the choice of filter.
+
+This problem builds that vocabulary from the ground up using nothing more than NumPy. You will work with a vibration-like sinusoid in noise, a calibrated sensor, and a rate gyroscope whose noise is dominated by different mechanisms on different time scales. The Allan deviation, which you implement from its definition, is the standard tool of inertial navigation for telling these mechanisms apart, and it reappears in problem 20 where it sets the process noise of a Kalman filter.
+
+\section*{Theoretical Framework}
+\subsection{Signal Classes and Measures}
+A continuous-time signal $x(t)$ is defined for all real $t$; a discrete-time signal $x[n]=x(nT_s)$ only at integers $n$, with sampling period $T_s=1/f_s$. For a record of $N$ samples,
+\begin{equation}
+  \bar{x}=\frac1N\sum_{n=0}^{N-1}x[n],\qquad
+  E_x=\sum_{n=0}^{N-1}x[n]^2,\qquad
+  P_x=\frac{E_x}{N},\qquad
+  x_{\rm rms}=\sqrt{P_x}.
+  \label{eq:measures}
+\end{equation}
+For a sinusoid $A\sin(2\pi f_0 t+\phi)$ the mean power is $A^2/2$ and $x_{\rm rms}=A/\sqrt2$; for a symmetric square wave $x_{\rm rms}=A$ and for a triangle wave $x_{\rm rms}=A/\sqrt3$ (derive all three). The \emph{crest factor} $x_{\rm peak}/x_{\rm rms}$ tells you how much headroom an amplifier or ADC needs.
+
+\subsection{Decibels and Signal-to-Noise Ratio}
+Decibels compare \emph{powers}; amplitudes are squared first:
+\begin{equation}
+  G_{\rm dB}=10\log_{10}\frac{P_2}{P_1}=20\log_{10}\frac{A_2}{A_1},\qquad
+  \mathrm{SNR}_{\rm dB}=10\log_{10}\frac{P_{\rm signal}}{P_{\rm noise}}.
+  \label{eq:snr}
+\end{equation}
+Doubling an amplitude adds $\SI{6.02}{\decibel}$; doubling a power adds $\SI{3.01}{\decibel}$. Absolute levels use a reference, for example $\mathrm{dBm}=10\log_{10}(P/\SI{1}{\milli\watt})$.
+
+\subsection{A Sensor Model}
+A linear sensor with a quantity $x$ at its input produces
+\begin{equation}
+  y[n]=S\,x[n]+b+\eta[n],\qquad \eta[n]\sim\mathcal N(0,\sigma^2),
+  \label{eq:sensor}
+\end{equation}
+with sensitivity $S$ (for example $\mathrm{V}/g$), offset $b$ and white noise of standard deviation $\sigma$. Given calibration points $(x_k,y_k)$ taken with known inputs, ordinary least squares gives $\hat S=\sum(x_k-\bar x)(y_k-\bar y)/\sum(x_k-\bar x)^2$ and $\hat b=\bar y-\hat S\bar x$ with $\Var(\hat S)=\sigma^2/\sum(x_k-\bar x)^2$. Noise is quoted either as an RMS value over a stated bandwidth or as a \emph{noise density} $n_d$ in $\si{\per\sqrt\hertz}$; for white noise sampled at $f_s$ with per-sample standard deviation $\sigma$, the one-sided density is $n_d=\sigma\sqrt{2/f_s}$ and conversely $\sigma=n_d\sqrt{f_{\rm BW}}$ with $f_{\rm BW}=f_s/2$.
+
+\subsection{Averaging, Robust Statistics and Their Limits}
+Averaging $M$ independent samples reduces the noise standard deviation to $\sigma/\sqrt M$, i.e.\ it gains $10\log_{10}M$ decibels of SNR. This stops when the noise is not independent: a slow drift (flicker or random-walk noise) does not average down, so an optimum averaging time exists. Impulsive outliers (spikes from a particle hit or a loose connector) wreck the sample standard deviation; the \emph{median absolute deviation} $\mathrm{MAD}=\operatorname{median}|x_i-\operatorname{median}(x)|$ gives the robust estimate $\hat\sigma=1.4826\,\mathrm{MAD}$ for Gaussian data.
+
+\subsection{Allan Variance}
+Split a record into consecutive clusters of duration $\tau$, let $\bar y_k$ be the mean of cluster $k$, and define
+\begin{equation}
+  \sigma_A^2(\tau)=\frac12\Big\langle(\bar y_{k+1}-\bar y_k)^2\Big\rangle_k .
+  \label{eq:allan}
+\end{equation}
+On a log--log plot the slope identifies the noise type: white rate noise (angle random walk, ARW) gives $\sigma_A(\tau)=\mathrm{ARW}/\sqrt\tau$ (slope $-\tfrac12$), flicker bias noise gives a flat floor (the \emph{bias instability}), and rate random walk gives slope $+\tfrac12$. For per-sample white noise of standard deviation $\sigma$ at rate $f_s$, $\mathrm{ARW}=\sigma/\sqrt{f_s}$ in $\si{\degree\per\sqrt\second}$ if $\sigma$ is in $\si{\degree\per\second}$.
+
+\section*{Data and Simulation Specification}
+\begin{simtable}
+Synthetic data & \texttt{sp\_common.synth.sensor\_signal(fs, duration, f0, amp, noise\_rms, drift\_per\_s, spike\_rate)} for Tasks 1--4; \texttt{sp\_common.synth.gyro\_noise(fs=100, duration=3600, sigma\_white=0.02, sigma\_rrw=1e-4, sigma\_bias=0.005, tau\_bias=200)} for Task 5 (units $\si{\degree\per\second}$; the ground-truth components are returned separately).\\
+Reference signal & $f_0=\Hz{5}$, $A=1$, $f_s=\Hz{1000}$, $\sigma=0.2$ (so $\mathrm{SNR}\approx\dB{11}$).\\
+Calibration & Known inputs $x\in\{-2,-1,0,1,2\}\,g$, true $S=0.3\,\mathrm{V}/g$, $b=\mV{12}$, $\sigma=\mV{5}$, ten readings per input.\\
+Real data (choose one) & (i) Record your own: install the free \emph{Phyphox} app on a smartphone, place it flat and still on a table, and log the accelerometer for 10 minutes (export CSV). (ii) The EuRoC MAV visual-inertial dataset (ETH Zurich, ASL): use the stationary start of one IMU recording at \Hz{200}.\\
+Real-data checks & Compare the noise density you measure with a typical MEMS accelerometer datasheet value (order of $100$--$400\,\mu g/\sqrt{\mathrm{Hz}}$).
+\end{simtable}
+
+\section*{Your Task}
+\begin{tasks}
+  \item \textbf{Signal measures (Stage 2).} Implement Eq.~\eqref{eq:measures}, crest factor and decibel functions from scratch. Verify numerically $x_{\rm rms}=A/\sqrt2,\,A,\,A/\sqrt3$ for sine, square and triangle waves and report the crest factors. Show that adding two uncorrelated signals adds their \emph{powers}, not their amplitudes.
+  \item \textbf{Sensor calibration.} Simulate the calibration experiment, fit $\hat S$ and $\hat b$ by least squares and compare $\sqrt{\Var(\hat S)}$ from theory with the spread over 2000 repeated experiments. Explain which input values would make $\hat S$ most precise for a limited number of readings.
+  \item \textbf{Noise statistics.} Histogram the noise of the reference signal, overlay the Gaussian density and make a quantile--quantile plot. Add random spikes (\texttt{spike\_rate}$=\SI{2}{\per\second}$) and compare the sample standard deviation with $1.4826\,\mathrm{MAD}$; explain the difference.
+  \item \textbf{Averaging and its limit.} Verify $\sigma/\sqrt M$ by averaging non-overlapping blocks of length $M=1,\dots,10^4$ of pure white noise (log--log plot). Repeat with a linear drift of $\SI{0.05}{\per\second}$ added and find the block length at which averaging stops helping.
+  \item \textbf{Allan deviation of a gyroscope.} Implement Eq.~\eqref{eq:allan} (non-overlapping and overlapping versions) and apply it to the synthetic gyro for $\tau$ from $\SI{0.01}{\second}$ to $\SI{1000}{\second}$. Read off ARW, the bias-instability floor and the random-walk branch, and compare with the generator's true parameters.
+  \item \textbf{Real sensor.} Process your smartphone or EuRoC data: histogram, noise density in $\si{\metre\per\second\squared\per\sqrt\hertz}$, Allan deviation. Is the noise white? What does the Allan curve say about the best averaging time?
+  \item \textbf{Dynamic range.} For an accelerometer with range $\pm 16\,g$ and a 16-bit ADC compute the LSB, the quantisation-limited dynamic range in decibels, and compare the LSB with your measured noise: is the sensor noise-limited or quantisation-limited?
+\end{tasks}
+
+\begin{checkpoint}
+A unit sinusoid has $x_{\rm rms}=0.7071$ and crest factor $1.414$; the reference signal has $\mathrm{SNR}\approx\dB{10.97}$. Averaging $M=100$ white samples reduces $\sigma$ by a factor $10$ ($\dB{20}$ of SNR). For Gaussian data $1.4826\,\mathrm{MAD}\to\sigma$. The synthetic gyro has ARW $=\sigma_{\rm white}/\sqrt{f_s}=\SI{0.002}{\degree\per\sqrt\second}$ (that is $\SI{0.12}{\degree\per\sqrt\hour}$), so $\sigma_A(\SI{1}{\second})\approx\SI{0.002}{\degree\per\second}$ with slope $-\tfrac12$ at short $\tau$.
+\end{checkpoint}
+
+\section*{Aerospace Application Link}
+A small satellite that loses its star tracker must coast on its gyroscope. The pointing error from white rate noise grows as $\sigma_\theta(T)=\mathrm{ARW}\sqrt T$, but an uncorrected constant bias $b$ grows as $bT$. Using your Allan analysis, compute for $T=1\,\mathrm{min},\,10\,\mathrm{min},\,1\,\mathrm{h}$ the angle error from the ARW alone and from the measured bias-instability floor, and state for how long the satellite can stay within a pointing budget of $\SI{1}{\degree}$ without an external reference. This number sets how often the attitude filter of problem 20 must be corrected.
+
+\section*{Deliverables}
+\begin{delivs}
+  \item[D1] \textbf{Measures notebook:} signal measures, crest factors and decibel conversions with the three waveform checks.
+  \item[D2] \textbf{Calibration and noise statistics:} least-squares calibration with theoretical versus empirical uncertainty, histogram and Q--Q plots, standard deviation versus MAD with spikes.
+  \item[D3] \textbf{Averaging study:} $\sigma(M)$ log--log plot with and without drift and the optimal averaging length.
+  \item[D4] \textbf{Allan analysis:} non-overlapping and overlapping Allan deviations of the synthetic gyro with ARW, bias instability and random-walk parameters extracted and compared with the truth.
+  \item[D5] \textbf{Real sensor report:} noise density and Allan deviation of your own or EuRoC data, and the dynamic-range calculation.
+  \item[D6] \textbf{Memo (250 words):} ``How long may the satellite coast on its gyroscope?'' Use your pointing-error numbers and cite at least two external sources.
+  \item[Bonus] (a) Add confidence intervals to the Allan deviation ($\sigma_A/\sqrt{2(N_\tau-1)}$ as a first estimate, then a bootstrap). (b) Show that the Allan deviation of a sine-wave vibration produces a characteristic bump and explain it. (c) Hardware: log an MPU-6050 or similar IMU with a microcontroller and repeat the analysis in a thermally stable box and next to a warm object.
+\end{delivs}
+
+\section*{Learning Resources}
+\resourcegroup{Signals and Measurement}
+\begin{resources}
+  \item Oppenheim, A.V., Willsky, A.S. \emph{Signals and Systems}, Ch.~1 (signal classes, energy and power).
+  \item Smith, S.W. \emph{The Scientist and Engineer's Guide to Digital Signal Processing}, Ch.~2 (statistics, noise and signal-to-noise ratio); free at \url{https://www.dspguide.com}.
+  \item Horowitz, P., Hill, W. \emph{The Art of Electronics}, chapter on low-noise techniques (noise sources and noise density).
+\end{resources}
+\resourcegroup{Allan Variance and Inertial Sensors}
+\begin{resources}
+  \item Allan, D.W. (1966). ``Statistics of atomic frequency standards.'' Proc.\ IEEE 54, 221.
+  \item IEEE Std 952-1997, \emph{Specification Format Guide and Test Procedure for Single-Axis Interferometric Fiber Optic Gyros} (Annex on Allan variance and noise terms).
+  \item El-Sheimy, N., Hou, H., Niu, X. (2008). ``Analysis and modeling of inertial sensors using Allan variance.'' IEEE Trans.\ Instrum.\ Meas.\ 57, 140.
+\end{resources}
+\resourcegroup{Data and Tools}
+\begin{resources}
+  \item Phyphox (smartphone sensor logging): \url{https://phyphox.org}
+  \item EuRoC MAV dataset: \url{https://projects.asl.ethz.ch/datasets/doku.php?id=kmavvisualinertialdatasets}
+  \item NumPy, Matplotlib: \url{https://numpy.org/doc/}, \url{https://matplotlib.org/stable/}; AllanTools (for cross-checking only): \url{https://allantools.readthedocs.io}
+\end{resources}
+
+\evaluation
+\end{document}

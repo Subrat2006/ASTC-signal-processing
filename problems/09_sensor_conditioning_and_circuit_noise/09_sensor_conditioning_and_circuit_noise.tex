@@ -1,0 +1,113 @@
+%% META id=09
+%% META slug=09_sensor_conditioning_and_circuit_noise
+%% META title=Sensor Conditioning and Circuit Noise
+%% META part=C
+%% META level=3
+%% META effort=12--16 hours
+%% META prereq=Problems 07, 08
+%% META theory=Thermal and shot noise, noise density, op-amp noise, bridge circuits and instrumentation amplifiers, transimpedance amplifiers, lock-in detection, noise budgets
+%% META skills=Noise-density to RMS conversion, input-referred noise cascades, bridge and amplifier sizing, digital lock-in implementation, end-to-end noise budgeting
+\documentclass[11pt,a4paper]{article}
+\usepackage{spl}
+\begin{document}
+\splheader{09}{Sensor Conditioning and Circuit Noise}{Part C: Electronics for Signal Processing \quad Level 3}%
+{Circuit Noise, Bridge Sensors, Amplifier Design, Lock-In Detection, Noise Budgets}%
+{Problems 07, 08}{12--16 hours}
+
+\begin{summarybox}{Sensor Conditioning and Circuit Noise: Getting a Microvolt Signal Out of a Noisy World}
+A strain gauge delivers millivolts, a photodiode picoamperes, and both sit next to a \SI{50}{\hertz} mains field a million times larger. Compute the fundamental noise floor of resistors and diodes, size a bridge amplifier and a transimpedance amplifier, build a digital lock-in that recovers a tone buried \SI{40}{\decibel} under noise, and assemble an end-to-end noise budget that tells you where the next decibel is cheapest.
+\end{summarybox}
+
+\generalinstructions{09\_sensor\_conditioning\_and\_circuit\_noise}
+
+\section*{Background and Motivation}
+The best digital algorithm cannot recover information that the analog front end never delivered. The front end must amplify a tiny sensor signal enough to use the ADC range, without adding more noise than the sensor itself, and without letting interference through. Three facts govern the design: every resistor produces thermal noise, the first amplifier stage dominates the cascade's noise, and a signal at a known frequency can be extracted from enormous broadband noise by narrow-band detection (a lock-in amplifier), at the cost of measurement time.
+
+You will quantify each of these with numbers, then combine them into a noise budget for a strain-gauge channel on a wing spar and a photodiode channel of a sun sensor. The digital lock-in you write is the same algorithm used in laboratory instruments, in modulated optical sensors and in spread-spectrum receivers.
+
+\section*{Theoretical Framework}
+\subsection{Fundamental Noise}
+Thermal (Johnson) noise of a resistance $R$ at temperature $T$ has open-circuit voltage density $e_n=\sqrt{4\kB TR}$ ($\SI{4.0}{\nano\volt\per\sqrt\hertz}$ for $\kOhm{1}$ at \Kel{290}); shot noise of a current $I$ has density $i_n=\sqrt{2qI}$ ($\SI{0.57}{\pico\ampere\per\sqrt\hertz}$ at $\SI{1}{\micro\ampere}$). Densities of independent sources add in power; RMS noise over a bandwidth is $v_{\rm rms}=e_n\sqrt{B_n}$ with $B_n$ the \emph{noise bandwidth}, which for a first-order low-pass with corner $f_c$ is $(\pi/2)f_c$ and for a first-order lock-in output filter with time constant $\tau$ is $1/(4\tau)$.
+
+\subsection{Amplifier Noise}
+An amplifier is modelled as a noiseless one with an input noise voltage $e_{na}$ and input noise current $i_{na}$. With source resistance $R_s$ the total input-referred density is
+\begin{equation}
+  e_{\rm tot}^2=4\kB TR_s+e_{na}^2+i_{na}^2R_s^2,\qquad R_{s,\rm opt}=\frac{e_{na}}{i_{na}}.
+  \label{eq:amp}
+\end{equation}
+For a cascade the input-referred noise of stage $k$ is divided by the squared gain of all earlier stages, so the first stage dominates.
+
+\subsection{Sensors and Their Front Ends}
+A quarter Wheatstone bridge with one active gauge of nominal resistance $R$ and strain $\varepsilon$ ($\Delta R/R=\mathrm{GF}\,\varepsilon$) and excitation $V_{\rm ex}$ gives
+\begin{equation}
+  V_{\rm out}=V_{\rm ex}\left[\frac{R+\Delta R}{2R+\Delta R}-\frac12\right]\approx\frac{V_{\rm ex}}4\,\frac{\Delta R}{R}.
+  \label{eq:bridge}
+\end{equation}
+It is amplified by an instrumentation amplifier of gain $G=1+2R_f/R_g$, whose common-mode rejection ratio keeps mains pickup out. A photodiode is read by a transimpedance amplifier $V=-I_{\rm ph}R_f$, which adds the current noise of the feedback resistor $i_n=\sqrt{4\kB T/R_f}$.
+
+\subsection{Lock-In Detection}
+To measure the amplitude $A$ and phase $\phi$ of $x(t)=A\cos(\omega_0t+\phi)+n(t)$ multiply by $2\cos\omega_0t$ and $2\sin\omega_0t$ and low-pass filter:
+\begin{equation}
+  X\approx A\cos\phi,\qquad Y\approx-A\sin\phi,\qquad R=\sqrt{X^2+Y^2},\ \ \theta=\operatorname{atan2}(-Y,X).
+  \label{eq:lockin}
+\end{equation}
+For white noise of per-sample standard deviation $\sigma$ at sample rate $f_s$ and a first-order output filter of time constant $\tau$, each quadrature has noise standard deviation $\sigma_X\approx\sigma/\sqrt{f_s\tau}$: the amplitude resolution improves as $1/\sqrt\tau$ until $1/f$ drift dominates.
+
+\section*{Data and Simulation Specification}
+\begin{simtable}
+Resistor noise & $R=\Ohm{350},\kOhm{1},\kOhm{100},\MOhm{1}$ at \Kel{290}, bandwidth \kHz{10}.\\
+Strain bridge & Quarter bridge, $R=\Ohm{350}$, gauge factor $2.0$, $V_{\rm ex}=\V{5}$, strain $0$--$2000\,\mu\varepsilon$, ADC range $\pm\V{2.5}$.\\
+Photodiode & Photocurrent \SI{1}{\nano\ampere}--\SI{100}{\micro\ampere}, feedback $R_f=\MOhm{10}$, diode capacitance \pF{20}, feedback capacitor \pF{1}.\\
+Lock-in data & \texttt{sp\_common.synth.lockin\_signal(fs=10000, duration=20, f\_ref=137, amp=1e-3)}: \SI{1}{\milli\volt} tone, white noise, $1/f$ noise and \SI{50}{\hertz} pickup of amplitude \SI{0.1}{\volt}; input SNR about \dB{-40}.\\
+Real data (optional hardware) & Photodiode and LED chopped at a known frequency by a microcontroller, sampled with the microcontroller ADC; or a loudspeaker tone recorded next to a running fan with the sound card and recovered by your lock-in.
+\end{simtable}
+
+\section*{Your Task}
+\begin{tasks}
+  \item \textbf{Noise floors (Stage 2).} Compute $e_n$ for the four resistors and the RMS noise in \kHz{10}; compute the shot-noise density for currents from \SI{1}{\nano\ampere} to \SI{1}{\milli\ampere}. Verify numerically by generating white noise with the computed density and measuring its RMS in a band. Plot the thermal noise of resistors against $R$ and mark the crossing with a typical op-amp $e_{na}=\SI{10}{\nano\volt\per\sqrt\hertz}$.
+  \item \textbf{Strain-gauge channel.} Evaluate Eq.~\eqref{eq:bridge} exactly and in the small-signal limit for $500\,\mu\varepsilon$. Choose the instrumentation-amplifier gain so that $2000\,\mu\varepsilon$ fills the ADC range, then compute the output noise of gauge, amplifier ($e_{na}=\SI{10}{\nano\volt\per\sqrt\hertz}$) and a 16-bit ADC in a $\Hz{100}$ bandwidth and the resulting strain resolution in micro-strain.
+  \item \textbf{Cascade noise and optimum source resistance.} Model a two-stage amplifier with gains $G_1,G_2$ and noise densities $e_1,e_2$; show that $e_{\rm tot}$ is dominated by stage 1 for $G_1\gg1$. Plot the noise figure against $R_s$ for $e_{na},i_{na}$ values of your choice and verify $R_{s,\rm opt}=e_{na}/i_{na}$.
+  \item \textbf{Transimpedance amplifier.} For $R_f=\MOhm{10}$ compute the current-noise density, the signal bandwidth set by $R_fC_f$ and the SNR of a \SI{1}{\nano\ampere} photocurrent in that bandwidth. Plot the SNR versus $R_f$ and choose $R_f$ for a \SI{10}{\micro\ampere} full-scale current with a \V{2.5} output limit.
+  \item \textbf{Digital lock-in.} Implement Eq.~\eqref{eq:lockin} with first- and second-order Butterworth output filters. Recover amplitude and phase of the synthetic tone for time constants $\tau=0.25$ to \s{4} and plot the RMS amplitude error against $\tau$ on log--log axes together with the $1/\sqrt\tau$ law; determine where $1/f$ noise or the \SI{50}{\hertz} leakage takes over.
+  \item \textbf{Alternatives.} Recover the same tone with (a) the FFT peak of the full record and (b) a narrow IIR band-pass. Compare accuracy, latency and the effect of choosing $f_{\rm ref}$ as a multiple of \SI{50}{\hertz} versus \SI{137}{\hertz}.
+  \item \textbf{Noise budget.} Assemble the strain-gauge noise budget (gauge, amplifier, aliasing of out-of-band noise, ADC quantisation) as a table in $\mu\varepsilon_{\rm rms}$ and identify the dominant term. State which single change (gain, bandwidth, excitation voltage, ADC bits) buys the largest improvement per unit cost.
+\end{tasks}
+
+\begin{checkpoint}
+$e_n=\SI{4.0}{\nano\volt\per\sqrt\hertz}$ for \kOhm{1} (\SI{2.4}{\nano\volt\per\sqrt\hertz} for \Ohm{350}); the quarter bridge gives \mV{1.249} exactly and \mV{1.25} in the small-signal limit at $500\,\mu\varepsilon$, so a gain of $G\approx500$ fills a $\pm\V{2.5}$ range at $2000\,\mu\varepsilon$ ($\mV{5}$). A \MOhm{10} feedback resistor has $i_n=\SI{40}{\femto\ampere\per\sqrt\hertz}$. The lock-in recovers \SI{1}{\milli\volt} to about 10\% with $\tau\approx\s{1}$ and its amplitude error falls as $1/\sqrt\tau$ before drift dominates.
+\end{checkpoint}
+
+\section*{Aerospace Application Link}
+Strain gauges on a wing spar measure flutter in a ground vibration test, and a sun sensor reads the position of the Sun on a quadrant photodiode in the presence of Earth albedo. For the strain channel report the minimum detectable strain (SNR~=~1) in a $\Hz{100}$ bandwidth. For the sun sensor, explain how chopping the source (or modulating an on-board LED for a calibration reference) and using a lock-in rejects the slowly varying albedo background, and compute the integration time needed to resolve $0.1\%$ amplitude changes if the white noise is $10^{-3}$ of the signal per $\sqrt{\mathrm{Hz}}$.
+
+\section*{Deliverables}
+\begin{delivs}
+  \item[D1] \textbf{Noise floors:} thermal and shot noise tables, the Monte Carlo verification and the resistor-noise plot.
+  \item[D2] \textbf{Strain channel:} bridge equation check, gain selection, strain resolution calculation.
+  \item[D3] \textbf{Cascade and TIA:} first-stage dominance demonstration, noise figure versus $R_s$, TIA design with SNR versus $R_f$.
+  \item[D4] \textbf{Lock-in:} notebook with amplitude and phase recovery, the error-versus-$\tau$ plot and the comparison with the FFT and IIR alternatives.
+  \item[D5] \textbf{Noise budget:} the table with the dominant term and the recommended improvement.
+  \item[D6] \textbf{Memo (250 words):} ``Where should the next decibel of strain-gauge SNR come from?'' Cite at least two external sources.
+  \item[Bonus] (a) Add an AC-coupled input and a $1/f$ corner to the amplifier noise model. (b) Implement a dual-phase lock-in with a reference recovered from the signal itself (PLL). (c) Build the chopped-photodiode experiment and compare the measured noise density with your prediction.
+\end{delivs}
+
+\section*{Learning Resources}
+\resourcegroup{Circuit Noise and Low-Noise Design}
+\begin{resources}
+  \item Horowitz, P., Hill, W. \emph{The Art of Electronics}, chapter on low-noise techniques (noise sources, op-amp noise, noise figure).
+  \item Motchenbacher, C.D., Connelly, J.A. \emph{Low-Noise Electronic System Design}.
+  \item Analog Devices, \emph{Op Amp Noise} tutorial MT-047 (free).
+\end{resources}
+\resourcegroup{Sensors and Lock-In Detection}
+\begin{resources}
+  \item Hoffmann, K. \emph{An Introduction to Measurements Using Strain Gages}, HBM (bridge circuits).
+  \item Stanford Research Systems, \emph{About Lock-In Amplifiers} application note (free).
+  \item Meade, M.L. \emph{Lock-in Amplifiers: Principles and Applications}.
+\end{resources}
+\resourcegroup{Tools}
+\begin{resources}
+  \item SciPy \texttt{scipy.signal} (\texttt{butter}, \texttt{sosfilt}): \url{https://docs.scipy.org/doc/scipy/reference/signal.html}
+\end{resources}
+
+\evaluation
+\end{document}

@@ -1,0 +1,21 @@
+name: spladder
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - numpy
+  - scipy
+  - matplotlib
+  - pandas
+  - jupyterlab
+  - pytest
+  - sympy
+  - scikit-learn
+  - pywavelets
+  - astropy
+  - pip
+  - pip:
+      - lightkurve
+      - gwpy
+      - allantools
+      # deep learning (CPU): pip install torch --index-url https://download.pytorch.org/whl/cpu

@@ -1,0 +1,101 @@
+%% META id=21
+%% META slug=21_features_and_classical_ml
+%% META title=Feature Engineering and Classical Machine Learning for Signals
+%% META part=E
+%% META level=3
+%% META effort=14--18 hours
+%% META prereq=Problems 12, 13, 18
+%% META theory=Segmentation, time-domain spectral and envelope features, bearing fault frequencies, logistic regression SVM and random forests, cross-validation, group leakage, class imbalance, threshold selection
+%% META skills=Feature extraction, envelope-spectrum analysis, scikit-learn pipelines, group-aware cross-validation, learning curves, precision-recall analysis and threshold tuning
+\documentclass[11pt,a4paper]{article}
+\usepackage{spl}
+\begin{document}
+\splheader{21}{Features and Classical Machine Learning}{Part E: Machine Learning for Signals \quad Level 3}%
+{Feature Engineering, Envelope Analysis, Classical Classifiers, Honest Validation, Fault Diagnosis}%
+{Problems 12, 13, 18}{14--18 hours}
+
+\begin{summarybox}{Features and Classical Machine Learning: Physics First, Classifier Second}
+A good feature is a piece of signal processing that makes the classes separable. Extract time-domain, spectral and envelope-spectrum features from vibration data, diagnose bearing faults, compare simple classifiers, and learn the most expensive mistake in applied machine learning: reporting accuracy from a validation split that shares recordings with the training set.
+\end{summarybox}
+
+\generalinstructions{21\_features\_and\_classical\_ml}
+
+\section*{Background and Motivation}
+Machine learning on signals is two jobs: turning a waveform into numbers that carry the relevant physics, and learning a decision rule from those numbers. For decades the first job was done by hand, from the Fourier transform and statistics of problems 07 and 12, and it still beats deep learning when data are few or when the physics is known. A failing rolling-element bearing, for example, produces impacts at a characteristic repetition rate that is a known multiple of the shaft speed; the envelope spectrum shows it as a line even when the raw spectrum looks like noise.
+
+The second job hides a trap. Real recordings are long, so they are cut into segments; segments from the same recording share the machine's speed, gain and resonance, and a classifier can memorise those nuisance values instead of learning the fault. Splitting the segments randomly into training and test sets then gives a flattering accuracy that vanishes when the system meets a new machine. This problem builds the pipeline, then shows you this trap and its remedy with a controlled experiment.
+
+\section*{Theoretical Framework}
+\subsection{Features of a Segment $x[n]$, $n=0..N-1$}
+Time domain: mean, RMS, peak, crest factor $x_{\rm pk}/x_{\rm rms}$, skewness, kurtosis $\E\{(x-\bar x)^4\}/\sigma^4$ (equal to $3$ for Gaussian noise; impulsive faults raise it), zero-crossing rate. Frequency domain from the PSD $S[k]$: spectral centroid $\sum f_kS_k/\sum S_k$ (for white noise $f_s/4$), bandwidth, band powers, dominant frequency, spectral entropy. Envelope domain: band-pass around the structural resonance, take the analytic-signal magnitude $|x+\jj\mathcal H\{x\}|$, remove its mean and compute its spectrum; a fault appears as lines at the fault frequency and its harmonics.
+
+\subsection{Bearing Fault Frequencies}
+For the drive-end bearing of the CWRU rig the fault frequencies are fixed multiples of the shaft frequency $f_r$: inner race $5.415f_r$, outer race $3.585f_r$, ball spin $4.714f_r$ (the ball signature appears at twice that), cage $0.398f_r$. The synthetic generator uses the same multiples.
+
+\subsection{Classifiers and Metrics}
+Logistic regression (linear boundary, probabilistic), RBF-kernel SVM (nonlinear, needs scaled features), random forest (bagged trees, robust, gives importances). Report accuracy, precision, recall, F1 and the confusion matrix; for imbalanced data use the precision--recall curve and average precision. Always compare with the trivial baseline (majority class or random).
+
+\subsection{Validation and Leakage}
+$k$-fold cross-validation estimates generalisation if folds are independent. Signal segments cut from one recording are \emph{not} independent; use \emph{group} cross-validation, splitting by recording (or machine, or day) so that no group appears on both sides. The gap between the random-split and group-split scores measures your leakage.
+
+\subsection{Decision Thresholds}
+A classifier's score becomes a decision at a threshold; choose it from the precision--recall or ROC curve to meet an operational requirement (for example recall $\ge0.95$ at the smallest false-alarm rate), not at the default $0.5$.
+
+\section*{Data and Simulation Specification}
+\begin{simtable}
+Dataset & \texttt{sp\_common.synth.bearing\_dataset(n\_recordings\_per\_class=8, segments\_per\_recording=10, segment\_s=0.5, fs=12000)}: 4 classes (none, inner, outer, ball), 320 segments of 6000 samples; per-recording nuisance variation in speed ($28.5$--$\Hz{30.5}$), severity, resonance ($2.8$--$\kHz{3.6}$), gain and noise; the \texttt{groups} vector gives recording ids.\\
+Envelope analysis demo & \texttt{sp\_common.synth.bearing\_vibration(fault=...)}, 10 s records, shaft frequency \Hz{29.95}.\\
+Robustness & Added white noise to give input SNR from $+10$ to $-10$ dB; train on shaft speeds below \Hz{29.5} and test above.\\
+Real data (choose one) & (i) CWRU Bearing Data Center, 12 kHz drive-end files for normal, inner-race, outer-race and ball faults at a fixed load: segment into 0.5 s pieces and repeat the experiment. (ii) HTRU2 pulsar candidates (UCI repository): 17\,898 candidates, 8 pre-computed features, 1\,639 real pulsars; a strongly imbalanced problem.
+\end{simtable}
+
+\section*{Your Task}
+\begin{tasks}
+  \item \textbf{Feature library (Stage 2).} Implement functions for time-domain, spectral and envelope features. Test them on signals with known answers (sine, Gaussian noise, square wave: RMS, kurtosis, centroid, crest factor) and compute the feature matrix for the whole dataset. Show a 2-D PCA projection coloured by class and by recording.
+  \item \textbf{Envelope analysis.} For one 10-s record of each fault type band-pass around the resonance, plot the envelope spectrum and mark the predicted fault frequency and harmonics. Compare detectability with the ordinary spectrum. Implement a simple kurtogram (kurtosis of the envelope over centre frequency and bandwidth) to find the best demodulation band automatically.
+  \item \textbf{Baselines.} Build scikit-learn pipelines (scaler plus logistic regression, SVM and random forest) and evaluate with (a) random stratified 5-fold CV and (b) \texttt{GroupKFold} by recording. Report the accuracy of the trivial baseline, both CV scores for each model and the optimism gap. Explain mechanistically why the gap occurs, using the PCA plot of Task~1.
+  \item \textbf{Feature ablation and importance.} Repeat the group-CV evaluation with time-only, spectral-only, envelope-only and all features; compute permutation importance for the random forest. Identify which fault class is hardest and why (use the confusion matrix).
+  \item \textbf{Robustness and domain shift.} Plot group-CV accuracy against input SNR; train on low shaft speeds and test on high ones; explain which features are speed-dependent and how you would make them speed-invariant (order tracking, normalising by shaft frequency).
+  \item \textbf{Learning curves and calibration.} Plot learning curves (accuracy versus number of training recordings). Check probability calibration with a reliability diagram and calibrate the best model. Choose a decision threshold that gives recall $\ge0.95$ for ``fault versus no fault'' and report the false-alarm rate it costs.
+  \item \textbf{Real data.} Repeat the pipeline on CWRU, \emph{splitting by file}, or on HTRU2 with class weights, a precision--recall curve and a threshold chosen for recall $\ge0.95$. Compare with the synthetic results and discuss what differs.
+\end{tasks}
+
+\begin{checkpoint}
+Four balanced classes give a trivial accuracy of $0.25$. Gaussian noise has kurtosis $3$ and spectral centroid $f_s/4$; a unit-amplitude sine has crest factor $\sqrt2$. For the outer-race fault the envelope spectrum shows a line at $3.585\times29.95=\Hz{107.4}$ (inner race $\Hz{162.2}$). Random-split CV is expected to score higher than group CV; report both and the difference.
+\end{checkpoint}
+
+\section*{Aerospace Application Link}
+Reaction-wheel bearing degradation is a recurring cause of satellite anomalies, and wheel speed varies continuously. Describe how you would deploy your classifier on a satellite: which features survive speed changes, what the onboard processor budget is for computing them (operations per \s{0.5} segment), what recall and false-alarm rate you require given that a false alarm triggers a safe-mode event and a miss risks losing the spacecraft, and how many labelled failures you can realistically have (which limits the model).
+
+\section*{Deliverables}
+\begin{delivs}
+  \item[D1] \textbf{Feature library:} tested functions, the feature matrix and the PCA plot.
+  \item[D2] \textbf{Envelope analysis:} envelope spectra for the four classes, the kurtogram.
+  \item[D3] \textbf{Baseline models:} random versus group CV table for the three models, the trivial baseline, mechanistic explanation of the gap.
+  \item[D4] \textbf{Ablation and robustness:} feature-group study, permutation importance, SNR and speed-shift experiments.
+  \item[D5] \textbf{Calibration, threshold and real data:} reliability diagram, operating point, CWRU or HTRU2 results.
+  \item[D6] \textbf{Memo (300 words):} ``Can we trust the 99\% accuracy?'' Explain leakage and give your honest performance estimate with uncertainty. Cite at least two external sources.
+  \item[Bonus] (a) Implement order tracking to remove the speed dependence. (b) Add cepstral features and compare. (c) Use a leave-one-machine-out evaluation on real CWRU loads (0--3 hp) to measure cross-load generalisation.
+\end{delivs}
+
+\section*{Learning Resources}
+\resourcegroup{Features and Machine Condition Monitoring}
+\begin{resources}
+  \item Randall, R.B. \emph{Vibration-Based Condition Monitoring}.
+  \item Smith, W.A., Randall, R.B. (2015). ``Rolling element bearing diagnostics using the Case Western Reserve University data: a benchmark study.'' Mech.\ Syst.\ Signal Process.\ 64--65, 100.
+  \item Antoni, J. (2007). ``Fast computation of the kurtogram for the detection of transient faults.'' Mech.\ Syst.\ Signal Process.\ 21, 108.
+\end{resources}
+\resourcegroup{Machine Learning}
+\begin{resources}
+  \item Hastie, T., Tibshirani, R., Friedman, J. \emph{The Elements of Statistical Learning}, chapters on model assessment, SVM and random forests.
+  \item G\'eron, A. \emph{Hands-On Machine Learning with Scikit-Learn, Keras and TensorFlow}.
+  \item Lyon, R.J.\ et al.\ (2016). ``Fifty years of pulsar candidate selection: from simple filters to a new principled real-time classification approach.'' Mon.\ Not.\ R.\ Astron.\ Soc.\ 459, 1104.
+\end{resources}
+\resourcegroup{Data and Tools}
+\begin{resources}
+  \item CWRU Bearing Data Center: \url{https://engineering.case.edu/bearingdatacenter}; HTRU2 at the UCI Machine Learning Repository: \url{https://archive.ics.uci.edu}
+  \item scikit-learn (\texttt{GroupKFold}, \texttt{Pipeline}, \texttt{permutation\_importance}): \url{https://scikit-learn.org/stable/}
+\end{resources}
+
+\evaluation
+\end{document}

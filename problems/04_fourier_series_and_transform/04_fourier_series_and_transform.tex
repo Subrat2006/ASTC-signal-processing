@@ -1,0 +1,113 @@
+%% META id=04
+%% META slug=04_fourier_series_and_transform
+%% META title=Fourier Series and the Fourier Transform
+%% META part=B
+%% META level=2
+%% META effort=10--14 hours
+%% META prereq=Problems 02, 03
+%% META theory=Fourier series, Gibbs phenomenon, Parseval, Fourier transform pairs and properties, convolution theorem, time-bandwidth uncertainty
+%% META skills=Numerical Fourier integrals, harmonic analysis and THD, transform-pair verification, uncertainty measurements, spectral reading of rotating machinery
+\documentclass[11pt,a4paper]{article}
+\usepackage{spl}
+\begin{document}
+\splheader{04}{Fourier Series and the Fourier Transform}{Part B: Mathematics of Signals and Systems \quad Level 2}%
+{Fourier Series, Fourier Transform, Gibbs Phenomenon, Uncertainty Principle, Harmonic Analysis}%
+{Problems 02, 03}{10--14 hours}
+
+\begin{summarybox}{Fourier Series and the Fourier Transform: Seeing a Signal as a Sum of Frequencies}
+Derive the Fourier coefficients of the standard waveforms by hand, watch partial sums converge (and overshoot), prove numerically that no signal can be short in both time and frequency, and read a rotating machine's vibration spectrum to extract shaft speed and blade-pass frequency.
+\end{summarybox}
+
+\generalinstructions{04\_fourier\_series\_and\_transform}
+
+\section*{Background and Motivation}
+The Fourier transform is the lens through which almost all instrument data is examined. A vibration record that looks like noise in time shows sharp lines at multiples of the shaft speed; a clipped amplifier output reveals itself as odd harmonics; a pulse of finite length has a spectrum whose width is set by its duration. Convolution in time becomes multiplication in frequency, which turns filtering and system analysis into algebra.
+
+Here you work in the continuous-time picture (approximated on a fine grid) so that the theory and numerics can be compared term by term. The discrete transform (DFT/FFT), with all its practical pitfalls, is the subject of problem 12; this problem prepares you by showing, with controlled examples, what the transform \emph{should} give.
+
+\section*{Theoretical Framework}
+\subsection{Fourier Series}
+A periodic signal of period $T_0$ ($\omega_0=2\pi/T_0$) has
+\begin{equation}
+  x(t)=\sum_{k=-\infty}^{\infty}c_k\,\ee^{\jj k\omega_0t},\qquad
+  c_k=\frac1{T_0}\int_0^{T_0}x(t)\,\ee^{-\jj k\omega_0t}\,\dd t,\qquad
+  P_x=\frac1{T_0}\int_0^{T_0}|x|^2\dd t=\sum_k|c_k|^2\ \ (\text{Parseval}).
+  \label{eq:fs}
+\end{equation}
+For a real signal $c_{-k}=c_k^\ast$ and the trigonometric form is $x=a_0+\sum_{k\ge1}(a_k\cos k\omega_0t+b_k\sin k\omega_0t)$ with $|c_k|=\tfrac12\sqrt{a_k^2+b_k^2}$. The unit-amplitude odd square wave has $b_k=4/(\pi k)$ for odd $k$ (and zero otherwise); the unit triangle wave has $b_k=\pm8/(\pi^2k^2)$ for odd $k$; the sawtooth has $b_k=\mp2/(\pi k)$. A discontinuity gives coefficients decaying as $1/k$, a continuous signal with a corner as $1/k^2$.
+
+\subsection{Gibbs Phenomenon}
+Partial sums of a function with a jump overshoot the jump by about $8.95\%$ \emph{of the jump height}, no matter how many terms are kept; the overshoot narrows but does not shrink. Smoothing the coefficients with Fej\'er (Ces\`aro) weights $(1-|k|/(K+1))$ or Lanczos $\sigma$-factors removes it at the cost of a slower edge.
+
+\subsection{Fourier Transform and Its Properties}
+\begin{equation}
+  X(f)=\int_{-\infty}^{\infty}x(t)\,\ee^{-\jj2\pi ft}\dd t,\qquad x(t)=\int_{-\infty}^{\infty}X(f)\,\ee^{\jj2\pi ft}\dd f,\qquad \int|x|^2\dd t=\int|X|^2\dd f.
+  \label{eq:ft}
+\end{equation}
+Key pairs: $\rect(t/T)\leftrightarrow T\sinc(fT)$; $\ee^{-t^2/2\sigma^2}\leftrightarrow\sigma\sqrt{2\pi}\,\ee^{-2\pi^2\sigma^2f^2}$; $\ee^{-a|t|}\leftrightarrow2a/(a^2+4\pi^2f^2)$; an impulse train of period $T$ $\leftrightarrow$ an impulse train of spacing $1/T$. Properties: shift $x(t-t_0)\leftrightarrow X(f)\ee^{-\jj2\pi ft_0}$; modulation $x(t)\cos2\pi f_ct\leftrightarrow\tfrac12[X(f-f_c)+X(f+f_c)]$; scaling $x(at)\leftrightarrow X(f/a)/|a|$; and $x*h\leftrightarrow XH$.
+
+\subsection{Time--Bandwidth Uncertainty}
+Define the RMS durations $\Delta t^2=\int t^2|x|^2\dd t/\int|x|^2\dd t$ and $\Delta f^2=\int f^2|X|^2\dd f/\int|X|^2\dd f$ (signal centred at zero). Then
+\begin{equation}
+  \Delta t\,\Delta f\ \ge\ \frac1{4\pi},
+  \label{eq:unc}
+\end{equation}
+with equality only for the Gaussian pulse. A signal cannot be both short and narrow-band; this is the origin of the window trade-offs of problems 12 and 17.
+
+\subsection{Total Harmonic Distortion}
+For a signal with fundamental amplitude $A_1$ and harmonics $A_2,A_3,\dots$, $\mathrm{THD}=\sqrt{\sum_{k\ge2}A_k^2}/A_1$, often quoted in dB or percent.
+
+\section*{Data and Simulation Specification}
+\begin{simtable}
+Waveforms & Unit-amplitude square, triangle and sawtooth waves, $T_0=\s{1}$; sine clipped at $\pm0.7$ of its amplitude for the THD task.\\
+Numerics & Dense grid $\Delta t\le\ms{0.1}$; evaluate $c_k$ and $X(f)$ by trapezoidal integration (not by FFT) first, then compare with FFT scaling $X(f_k)\approx\Delta t\,\mathrm{FFT}[k]$.\\
+Pulses & Rectangular ($T=\ms{20}$), Gaussian ($\sigma=\ms{5}$), two-sided exponential ($a=\SI{100}{\per\second}$), linear chirp ($\Hz{100}\to\Hz{400}$ in \ms{200}).\\
+Machine signal & \texttt{sp\_common.synth.bearing\_vibration(fault="none", shaft\_hz=29.95, fs=12000, duration=10)}: shaft harmonics plus noise.\\
+Real data (choose one) & (i) Record a tuning-fork app, your voice saying ``aaah'' or a running fan with Phyphox (audio or accelerometer). (ii) Monthly mean sunspot number from SILSO (Royal Observatory of Belgium): find the solar-cycle period by Fourier analysis. (iii) Normal-baseline drive-end record of the Case Western Reserve University Bearing Data Center (\kHz{12} sampling).
+\end{simtable}
+
+\section*{Your Task}
+\begin{tasks}
+  \item \textbf{Fourier series by hand and by code (Stage 2).} Derive $c_k$ for the square, triangle and sawtooth waves on paper. Compute them by numerical integration, plot $|c_k|$ against $k$ on log--log axes and fit the decay exponents ($-1$, $-2$, $-1$). Plot partial sums with $K=1,3,5,11,51$ harmonics and the RMS error versus $K$.
+  \item \textbf{Gibbs phenomenon.} Measure the overshoot of the square-wave partial sums for $K$ up to 1001 and show it converges to about $17.9\%$ of the half-amplitude ($8.95\%$ of the jump). Apply Fej\'er and Lanczos smoothing and compare the overshoot and the 10--90\% edge width.
+  \item \textbf{Parseval and distortion.} Verify Eq.~\eqref{eq:fs} for the square wave (the sum of $|c_k|^2$ must tend to $1$). Compute the THD of the clipped sine analytically from its Fourier coefficients and numerically; plot THD versus clipping level.
+  \item \textbf{Transform pairs.} Compute $X(f)$ numerically for the rectangle, Gaussian and exponential pulses, overlay the analytic transforms, and report the maximum relative error. Show what happens when the integration window truncates the exponential or the sampling step is too coarse.
+  \item \textbf{Properties.} Verify time shift (phase ramp), modulation (spectrum shift to $\pm f_c$, i.e.\ AM), scaling (time compression widens the spectrum) and the convolution theorem (filtering by multiplying in frequency versus convolving in time) numerically.
+  \item \textbf{Uncertainty principle.} Measure $\Delta t\,\Delta f$ for the Gaussian, rectangle, exponential and chirp pulses and confirm Eq.~\eqref{eq:unc}, with equality only for the Gaussian. Show how the Gaussian's product changes if you apply a chirp phase.
+  \item \textbf{Rotating machinery.} Compute the amplitude spectrum of the machine signal and of your real recording. Identify the harmonic series, estimate the shaft frequency from the harmonic spacing and convert to rpm.
+\end{tasks}
+
+\begin{checkpoint}
+Square wave: $b_1=1.2732$, $b_3=0.4244$, and $\sum|c_k|^2\to1$. Triangle-wave coefficients fall as $1/k^2$. The Gibbs peak of a unit square wave's partial sum approaches $1.179$. For the Gaussian, $\Delta t\,\Delta f=1/(4\pi)=0.0796$; for the rectangle it is larger (and for the rectangle $\Delta f$ is not finite, so use a truncated frequency band and say so). The shaft of the synthetic machine is $\Hz{29.95}$, i.e.\ $1797\,\mathrm{rpm}$.
+\end{checkpoint}
+
+\section*{Aerospace Application Link}
+A two-blade propeller turning at $4800\,\mathrm{rpm}$ has a shaft frequency of \Hz{80} and a blade-pass frequency of \Hz{160}; airframe panels excited at those lines (and their harmonics) fatigue. Using the machine spectrum, state which lines you would monitor on a flight test for an engine with $N_b$ blades, compute the THD of the strain-gauge amplifier that clips at 70\% of full scale, and decide whether the amplifier gain must be reduced to keep THD below 1\%.
+
+\section*{Deliverables}
+\begin{delivs}
+  \item[D1] \textbf{Fourier series notebook:} hand derivations (scanned or typeset), coefficient plots with fitted exponents, partial sums and error versus $K$.
+  \item[D2] \textbf{Gibbs study:} overshoot versus $K$, Fej\'er and Lanczos comparison.
+  \item[D3] \textbf{Parseval and THD:} the power sum and the THD-versus-clipping plot.
+  \item[D4] \textbf{Transforms and properties:} numerical versus analytic transforms with errors, and the four property demonstrations.
+  \item[D5] \textbf{Uncertainty and machine spectrum:} table of $\Delta t\,\Delta f$ values and the annotated machine spectrum with rpm estimate.
+  \item[D6] \textbf{Memo (250 words):} ``What can the spectrum tell us about the health of a rotating machine?'' Cite at least two external sources.
+  \item[Bonus] (a) Show that the Fourier transform of a Gaussian pulse is again Gaussian by evaluating the integral analytically (complete the square). (b) Compute the transform of a pulse train and explain the line spacing $1/T$. (c) Compute the Hilbert transform of a tone and the analytic signal of an AM waveform.
+\end{delivs}
+
+\section*{Learning Resources}
+\resourcegroup{Fourier Analysis}
+\begin{resources}
+  \item Oppenheim, A.V., Willsky, A.S. \emph{Signals and Systems}, Ch.~3 (Fourier series) and Ch.~4 (continuous-time Fourier transform).
+  \item Bracewell, R.N. \emph{The Fourier Transform and Its Applications} (pairs, theorems, uncertainty relation).
+  \item Smith, S.W. \emph{The Scientist and Engineer's Guide to Digital Signal Processing}, Ch.~8--10; \url{https://www.dspguide.com}.
+\end{resources}
+\resourcegroup{Machinery and Data}
+\begin{resources}
+  \item Randall, R.B. \emph{Vibration-Based Condition Monitoring} (spectra of rotating machines).
+  \item Smith, W.A., Randall, R.B. (2015). ``Rolling element bearing diagnostics using the Case Western Reserve University data: A benchmark study.'' Mech.\ Syst.\ Signal Process.\ 64--65, 100.
+  \item CWRU Bearing Data Center: \url{https://engineering.case.edu/bearingdatacenter}; SILSO sunspot data: \url{https://www.sidc.be/SILSO/}
+\end{resources}
+
+\evaluation
+\end{document}

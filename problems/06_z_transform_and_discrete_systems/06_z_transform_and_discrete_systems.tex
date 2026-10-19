@@ -1,0 +1,118 @@
+%% META id=06
+%% META slug=06_z_transform_and_discrete_systems
+%% META title=Z-Transform and Discrete-Time Systems
+%% META part=B
+%% META level=2
+%% META effort=10--14 hours
+%% META prereq=Problems 02, 05
+%% META theory=Z-transform and ROC, difference equations, pole-zero analysis, unit-circle frequency response, discretisation by Euler and bilinear mappings, warping, sample-rate effects on control loops
+%% META skills=Difference-equation implementation, pole-zero design of resonators and notches, s-to-z mappings, discrete controller stability analysis, block versus sample processing
+\documentclass[11pt,a4paper]{article}
+\usepackage{spl}
+\begin{document}
+\splheader{06}{Z-Transform and Discrete-Time Systems}{Part B: Mathematics of Signals and Systems \quad Level 2}%
+{Z-Transform, Difference Equations, Pole-Zero Design, Discretisation, Discrete Control}%
+{Problems 02, 05}{10--14 hours}
+
+\begin{summarybox}{Z-Transform and Discrete-Time Systems: The Mathematics of Everything That Runs on a Processor}
+Every filter and controller that runs on a flight computer is a difference equation. The $z$-transform turns it into a rational function whose poles and zeros you can place by hand: design a notch that deletes mains hum, a resonator that picks out one tone, map an analog design to digital in four different ways, and find the sample time at which a numerical integration or a controller blows up.
+\end{summarybox}
+
+\generalinstructions{06\_z\_transform\_and\_discrete\_systems}
+
+\section*{Background and Motivation}
+A microcontroller does not integrate or differentiate; it adds and subtracts stored numbers once per clock tick. The discrete-time counterpart of the Laplace transform, the $z$-transform, is therefore the natural language of embedded signal processing. The unit circle plays the role of the imaginary axis, stability means poles \emph{inside} the circle, and the frequency response is read off by walking around the circle.
+
+You will also face the practical question that follows every analog design: ``how do I run this on a computer?'' There are several mappings from $s$ to $z$, each with a different price in accuracy and stability. Choosing the sample rate and the mapping is a core embedded-systems skill, and this problem lets you see exactly what each choice does.
+
+\section*{Theoretical Framework}
+\subsection{Z-Transform, ROC and Transfer Function}
+\begin{equation}
+  X(z)=\sum_{n=-\infty}^{\infty}x[n]z^{-n},\qquad
+  a^nu[n]\leftrightarrow\frac{1}{1-az^{-1}},\ |z|>|a|,\qquad x[n-k]\leftrightarrow z^{-k}X(z).
+  \label{eq:zt}
+\end{equation}
+A linear constant-coefficient difference equation $\sum_{k=0}^{N}a_ky[n-k]=\sum_{k=0}^{M}b_kx[n-k]$ has
+\begin{equation}
+  H(z)=\frac{\sum_kb_kz^{-k}}{\sum_ka_kz^{-k}},\qquad H(\ee^{\jj\omega})=H(z)\big|_{z=\ee^{\jj\omega}},\ \ \omega=2\pi f/f_s.
+  \label{eq:Hz}
+\end{equation}
+A causal system is stable if and only if all poles satisfy $|p|<1$. Poles near the unit circle at angle $\omega_0$ create resonances; zeros on the unit circle at $\omega_0$ create exact nulls.
+
+\subsection{Elementary Designs from Poles and Zeros}
+A \emph{leaky integrator} $y[n]=ay[n-1]+x[n]$ has DC gain $1/(1-a)$. A \emph{digital resonator} with poles at $r\ee^{\pm\jj\omega_0}$ has a $3\,\mathrm{dB}$ bandwidth of roughly $2(1-r)$ rad/sample for $r$ close to 1. A \emph{notch} that removes frequency $\omega_0$ places zeros at $\ee^{\pm\jj\omega_0}$ and poles at $r\ee^{\pm\jj\omega_0}$:
+\begin{equation}
+  H_{\rm notch}(z)=\frac{1-2\cos\omega_0\,z^{-1}+z^{-2}}{1-2r\cos\omega_0\,z^{-1}+r^2z^{-2}}.
+  \label{eq:notch}
+\end{equation}
+
+\subsection{From Analog to Digital: Mappings}
+With sample time $T$ and an analog $H(s)$:
+\begin{itemize}
+  \item matched pole--zero / impulse invariance: poles map by $z=\ee^{sT}$;
+  \item forward Euler $s\to(z-1)/T$ and backward Euler $s\to(z-1)/(zT)$;
+  \item bilinear (Tustin) $s\to\dfrac2T\dfrac{z-1}{z+1}$, which maps the whole left half-plane into the unit disc and warps frequency: $\omega_a=\dfrac2T\tan\dfrac{\omega_dT}{2}$, so the digital frequency $\omega_d$ of a feature is realised at analog frequency $\omega_a$ (\emph{prewarp} to place a critical frequency exactly).
+\end{itemize}
+Forward Euler maps stable analog poles to $1+sT$, which can leave the unit circle if $T$ is too large: for the poles of a second-order system, $|1+sT|<1$ requires $T<2\zeta/\omega_n$.
+
+\subsection{Delay in Digital Loops}
+A zero-order hold plus computation delay adds an effective delay of about $T$ (hold alone $T/2$), i.e.\ a phase lag of $\omega T/2$ rad at frequency $\omega$ from the hold alone. A rule of thumb is $f_s\gtrsim20$--$30$ times the closed-loop bandwidth.
+
+\section*{Data and Simulation Specification}
+\begin{simtable}
+Sequences & $x[n]=a^nu[n]$ ($a=0.8,\,-0.5,\,1.1$), $x[n]=nu[n]$, $x[n]=\cos(\omega_0n)u[n]$.\\
+Difference equations & $y[n]=0.9y[n-1]+x[n]$; $y[n]=1.5y[n-1]-0.7y[n-2]+x[n]$; 5-point moving average.\\
+Mains notch & Sensor data at $f_s=\Hz{1000}$ with a \Hz{50} interference; \texttt{sp\_common.synth.sensor\_signal} plus a \Hz{50} sinusoid of amplitude 1 added to a \Hz{5} signal.\\
+Analog prototype & $H(s)=\omega_n^2/(s^2+2\zeta\omega_ns+\omega_n^2)$ with $\omega_n=2\pi\times50\,\si{\radian\per\second}$, $\zeta=0.5$; sample times $T=\ms{1},\,\ms{5},\,\ms{10},\,\ms{15}$.\\
+Attitude loop & The $J=10$, $\omega_n=0.3$, $\zeta=0.7$ satellite of problem 05, simulated with forward Euler at $T=0.01,0.1,0.5,2,5\,\mathrm{s}$ and discretised with Tustin.\\
+Real data & Optional hardware: run your notch or resonator on a microcontroller (Arduino, ESP32) at a fixed sample rate with an ADC input, or process your own Phyphox accelerometer log sample by sample in a loop, as an embedded device would.
+\end{simtable}
+
+\section*{Your Task}
+\begin{tasks}
+  \item \textbf{Transforms and inversion (Stage 2).} Derive the $z$-transforms of the sequences in the table, state each ROC and invert $X(z)=1/((1-0.5z^{-1})(1-0.25z^{-1}))$ by partial fractions and by long division; check with \texttt{scipy.signal.residuez} and the impulse response of \texttt{lfilter}.
+  \item \textbf{Difference equations by hand.} Implement the difference equations as explicit loops (direct form I and transposed direct form II) and compare with \texttt{scipy.signal.lfilter} to machine precision. Plot pole-zero maps with the unit circle and the impulse responses; for $y[n]=ay[n-1]+x[n]$ sweep $a$ across $\pm1$ and show the transition to instability at $|a|=1$.
+  \item \textbf{Frequency responses.} Evaluate Eq.~\eqref{eq:Hz} on a frequency grid and compare with \texttt{scipy.signal.freqz}. Design (a) a digital resonator at \Hz{100}, $f_s=\Hz{1000}$ with $r=0.95$ and verify its bandwidth, and (b) the notch of Eq.~\eqref{eq:notch} at \Hz{50} and apply it to the sensor data; report the attenuation of the interference and the distortion of the \Hz{5} signal for $r=0.9,0.95,0.99$ together with the settling time of the transient.
+  \item \textbf{Mappings from $s$ to $z$.} Discretise the analog prototype by matched poles, forward Euler, backward Euler and Tustin at each sample time. Plot step responses and magnitude responses against the analog original, and measure the frequency error of each method as a function of $f/f_s$. Show the warping of Tustin and prewarp it so that the cutoff is exact.
+  \item \textbf{Sample rate and stability.} Simulate the closed-loop attitude ODE with forward Euler at the listed $T$, find the largest stable $T$ and compare with $2\zeta/\omega_n$. Repeat with Tustin and explain why it stays stable.
+  \item \textbf{Cascaded sections.} Realise a 4th-order Butterworth low-pass as one direct-form polynomial and as two cascaded second-order sections. Compare their responses in double precision and with coefficients rounded to 6 significant digits; explain the sensitivity.
+  \item \textbf{Sample-by-sample processing.} Write a stateful filter object with a \texttt{step(x)} method and show that processing a stream sample by sample, in blocks of 7 samples, and all at once gives identical output (use \texttt{lfilter}'s \texttt{zi}).
+\end{tasks}
+
+\begin{checkpoint}
+The leaky integrator with $a=0.9$ has DC gain $10$; the notch has an exact zero at \Hz{50} (magnitude $<10^{-12}$ at that frequency in double precision). For forward Euler the $\omega_n=0.3,\ \zeta=0.7$ attitude loop must become unstable above $T=2\zeta/\omega_n=4.67\,\mathrm{s}$; the Tustin version is stable for every $T$. The Tustin map of an analog frequency $\omega_a$ is $\omega_d=2\arctan(\omega_aT/2)$.
+\end{checkpoint}
+
+\section*{Aerospace Application Link}
+A flight computer runs the attitude loop of problem 05 at a fixed rate. Using your Task~5 results and the delay rule of thumb (hold plus compute latency $\approx T$), compute the loop's phase margin loss for $f_s=10,\,50,\,\Hz{200}$ given a gain-crossover frequency of $\SI{0.5}{\radian\per\second}$, and recommend the smallest sample rate that costs less than $5^\circ$ of phase. State what additional latency from a star tracker running at \Hz{5} does to this budget.
+
+\section*{Deliverables}
+\begin{delivs}
+  \item[D1] \textbf{Transform notebook:} $z$-transforms, ROC statements, inversions with checks.
+  \item[D2] \textbf{Difference-equation implementations:} loops versus \texttt{lfilter}, pole-zero maps, stability sweep.
+  \item[D3] \textbf{Resonator and notch designs:} frequency responses, attenuation and settling-time table for the three $r$ values.
+  \item[D4] \textbf{Mapping comparison:} step and magnitude responses for the four methods and four sample times, with the prewarped Tustin design.
+  \item[D5] \textbf{Sample-rate study:} the attitude-loop stability limits and the cascade-versus-direct sensitivity comparison, plus the streaming-versus-block equivalence test.
+  \item[D6] \textbf{Memo (250 words):} ``What sample rate should the attitude loop run at?'' Cite at least two external sources.
+  \item[Bonus] (a) Derive the exact relation between pole radius and the 3-dB bandwidth of the resonator. (b) Implement the filters in fixed-point integer arithmetic. (c) Run the notch on a real microcontroller reading a signal generator and measure its attenuation with an oscilloscope.
+\end{delivs}
+
+\section*{Learning Resources}
+\resourcegroup{Z-Transform and Discrete Systems}
+\begin{resources}
+  \item Oppenheim, A.V., Schafer, R.W. \emph{Discrete-Time Signal Processing}, Ch.~2--3 (discrete-time systems, $z$-transform) and Ch.~5 (transform analysis of LTI systems).
+  \item Proakis, J.G., Manolakis, D.G. \emph{Digital Signal Processing}, Ch.~3--5.
+  \item Lyons, R.G. \emph{Understanding Digital Signal Processing}, Ch.~6 (IIR filters) for the pole-zero intuition.
+\end{resources}
+\resourcegroup{Discretisation and Control}
+\begin{resources}
+  \item Franklin, G.F., Powell, J.D., Workman, M.L. \emph{Digital Control of Dynamic Systems} (emulation of continuous designs, delay from sampling).
+  \item \r{A}str\"om, K.J., Wittenmark, B. \emph{Computer-Controlled Systems} (sampling and discretisation methods).
+\end{resources}
+\resourcegroup{Tools}
+\begin{resources}
+  \item SciPy \texttt{scipy.signal} (\texttt{lfilter}, \texttt{freqz}, \texttt{residuez}, \texttt{cont2discrete}): \url{https://docs.scipy.org/doc/scipy/reference/signal.html}
+\end{resources}
+
+\evaluation
+\end{document}

@@ -1,0 +1,104 @@
+%% META id=16
+%% META slug=16_multirate_processing
+%% META title=Multirate Processing and SDR Front Ends
+%% META part=D
+%% META level=3
+%% META effort=12--16 hours
+%% META prereq=Problems 12, 14
+%% META theory=Decimation and interpolation, polyphase structures, rational resampling, CIC filters and bit growth, digital down-conversion, FM demodulation from IQ, channelisation
+%% META skills=Polyphase filter coding, rational resampling, integer CIC implementation, digital down-converter chain, multi-signal channelisation, computational cost accounting
+\documentclass[11pt,a4paper]{article}
+\usepackage{spl}
+\begin{document}
+\splheader{16}{Multirate Processing}{Part D: Digital Signal Processing \quad Level 3}%
+{Decimation, Interpolation, Polyphase Filters, CIC Filters, Digital Down-Conversion, IQ Signals}%
+{Problems 12, 14}{12--16 hours}
+
+\begin{summarybox}{Multirate Processing: Throwing Samples Away Without Throwing Information Away}
+A software-defined radio delivers millions of samples per second of which you need thousands. Implement decimation and interpolation with anti-alias and anti-image filters, polyphase structures that do the work at the low rate, rational resampling, an integer CIC filter, and a complete digital down-converter that pulls a narrowband FM signal out of a wideband IQ capture.
+\end{summarybox}
+
+\generalinstructions{16\_multirate\_processing}
+
+\section*{Background and Motivation}
+A low-cost SDR dongle samples a \SI{2.4}{\mega\hertz}-wide slice of spectrum, 2.4 million complex samples per second, \SI{76.8}{\mega bit\per\second} at 16 bits per component. The signal you want, a \SI{12.5}{\kilo\hertz} narrowband FM channel or a \SI{9.6}{\kilo baud} telemetry stream, is a thousandth of that. You must select it, filter, and reduce the rate so that the rest of the chain (demodulation, decoding) runs on a small processor. Doing this naively, a long filter running at the full rate, is wasteful by two to three orders of magnitude; multirate structures do the work at the low rate.
+
+The same ideas run in reverse for interpolation (a DAC fed from a slow data stream), for sample-rate conversion between asynchronous clocks, and inside sigma-delta converters (problem 10). This problem builds each block and then assembles the digital down-converter used by every SDR receiver.
+
+\section*{Theoretical Framework}
+\subsection{Decimation and Interpolation}
+Keeping every $M$th sample replicates the spectrum with spacing $f_s/M$, so aliasing must be prevented by low-pass filtering with cutoff $f_s/(2M)$ \emph{before} downsampling. Interpolation by $L$ inserts $L-1$ zeros between samples (creating $L-1$ spectral images) and removes the images with a low-pass filter of cutoff $f_s/2$ (original rate) and gain $L$. Rational resampling by $L/M$ is interpolation followed by decimation with a single filter of cutoff $\min(\pi/L,\pi/M)$ at the intermediate rate.
+
+\subsection{Polyphase Structures}
+Writing the filter as $M$ sub-filters $h_p[n]=h[nM+p]$ lets a decimator compute only the output samples that are kept: a filter of $K$ taps then costs $K$ multiplications per \emph{output} sample instead of per \emph{input} sample, a saving of a factor $M$. Likewise an interpolator needs $K/L$ multiplications per output sample. The noble identities allow moving the rate change through the filter.
+
+\subsection{CIC Filters}
+A cascaded integrator--comb filter of order $N$, rate change $R$ and differential delay $1$ has
+\begin{equation}
+  H(z)=\left[\frac{1-z^{-R}}{1-z^{-1}}\right]^N,\qquad |H(\ee^{\jj\omega})|=\left|\frac{\sin(\omega R/2)}{\sin(\omega/2)}\right|^N,\qquad\text{DC gain }R^N,
+  \label{eq:cic}
+\end{equation}
+requiring no multipliers. The integrators overflow, but two's-complement wrap-around cancels in the combs provided the register width is at least $N\log_2R+B_{\rm in}$ bits (bit growth). Its passband droops as $\sinc^N$, usually corrected by a short compensation FIR after decimation.
+
+\subsection{Complex Baseband and Digital Down-Conversion}
+A real band-pass signal at $f_c$ is represented by the complex baseband $x_{\rm bb}[n]=x[n]\ee^{-\jj2\pi f_cn/f_s}$ after low-pass filtering; negative frequencies are meaningful for complex (IQ) data. A \emph{digital down-converter} (DDC) mixes the wanted channel to DC, low-pass filters, and decimates, typically in stages (CIC first, then FIR). An FM signal in complex baseband is demodulated by $\Delta\phi[n]=\arg\big(x[n]\,x^\ast[n-1]\big)$, proportional to the instantaneous frequency.
+
+\section*{Data and Simulation Specification}
+\begin{simtable}
+Wideband IQ & \texttt{sp\_common.synth.iq\_multiband(fs=2.4e6, duration=0.25)}: NBFM voice-like signal at $+\SI{200}{\kilo\hertz}$ (audio tones \SI{1}{\kilo\hertz} and \SI{2.3}{\kilo\hertz}), \SI{9.6}{\kilo baud} BPSK-like data at $-\SI{350}{\kilo\hertz}$, a CW tone at $+\SI{50}{\kilo\hertz}$ and a DC spike.\\
+Decimation & Test tones near $f_s/(2M)$ for $M=2,4,8$; Kaiser anti-alias FIR with \dB{60} stopband.\\
+Rational resampling & $44.1\to\kHz{48}$ ($L=160$, $M=147$) of a swept sine.\\
+CIC & $R=8,16$, $N=3,4$, 16-bit signed input; integer arithmetic with wrap-around.\\
+DDC chain & $2.4\ \mathrm{MS/s}\to50\ \mathrm{kS/s}$ (total decimation 48), CIC decimation by 12 then FIR by 4.\\
+Real data (optional) & Your own capture from an RTL-SDR dongle of a broadcast FM station (centre frequency 88--108 MHz, 2.4 MS/s, 8-bit IQ); demodulate the audio.
+\end{simtable}
+
+\section*{Your Task}
+\begin{tasks}
+  \item \textbf{Decimation (Stage 2).} Decimate a tone close to the new Nyquist frequency by $M=2,4,8$ with and without an anti-alias filter and show the alias. Design the filter with Kaiser's formula, implement filter-then-downsample and a polyphase decimator, verify that they give identical outputs, and count multiplications per output sample to confirm the saving of $M$.
+  \item \textbf{Interpolation.} Interpolate a sine by $L=4$ and $L=8$ by zero-stuffing and filtering. Plot the images before filtering and verify the required gain $L$. Compare the interpolation error with linear interpolation and with sinc interpolation of problem 02.
+  \item \textbf{Rational resampling.} Resample a swept sine from $44.1$ to \kHz{48} with a hand-built polyphase resampler; compare with \texttt{scipy.signal.resample\_poly} and measure the SNR of the difference. Explain how the filter length is chosen at the intermediate rate of \SI{7.056}{\mega\hertz}.
+  \item \textbf{CIC filter.} Implement integrator and comb sections in integer arithmetic. Verify the frequency response of Eq.~\eqref{eq:cic}, the DC gain $R^N$ and the first nulls at multiples of $f_s/R$. Demonstrate wrap-around correctness with a register width equal to the bit-growth formula and the failure with fewer bits. Design a droop-compensation FIR.
+  \item \textbf{Digital down-converter.} From the IQ capture extract the NBFM channel at $+\SI{200}{\kilo\hertz}$: mix to DC, decimate with a CIC and an FIR, FM-demodulate and recover the 1 kHz and 2.3 kHz audio tones. Plot the spectrum at every stage and report the SNR of each recovered tone. Compare the total multiplication count with a single-stage FIR running at \SI{2.4}{\mega S\per\second}.
+  \item \textbf{Channeliser.} Extract all three signals. For the BPSK data, resample to an integer number of samples per symbol (for example 4 or 8) with your polyphase resampler, apply a matched filter and recover the bit stream; compare with the transmitted bits (the generator's seed gives the truth if you regenerate it).
+  \item \textbf{Real capture and CPU budget.} Process your own RTL-SDR capture (or, failing that, tone-generator data through your sound card) with the same chain. Tabulate the multiply--accumulate operations per second of every stage and state whether the chain would run on a Raspberry Pi-class processor in real time.
+\end{tasks}
+
+\begin{checkpoint}
+A CIC filter with $R=8$, $N=3$ has DC gain $8^3=512$ and nulls at $f_s/8$ and its multiples; the bit growth is $N\log_2R=9$ bits. A polyphase decimator by $M$ needs $1/M$ of the multiplications per input sample of the direct filter. The rational factor for $44.1\to48$ kHz is $L/M=160/147$. The DDC must recover the 1 kHz and 2.3 kHz tones at the right frequencies after FM demodulation (check the spectrum peaks to $<1$ Hz).
+\end{checkpoint}
+
+\section*{Aerospace Application Link}
+A ground station records \SI{2.4}{\mega S\per\second} IQ (\SI{76.8}{\mega bit\per\second} at 16 bit per component) while the satellite telemetry occupies \SI{9.6}{\kilo baud}. Using your CPU-budget table compute the data rate and MAC rate before and after the DDC, the storage per pass of \SI{10}{\minute} in each case and the minimum processor class that can run the chain in real time. Explain why a CIC stage is attractive on an FPGA and where a polyphase FIR is better on a CPU.
+
+\section*{Deliverables}
+\begin{delivs}
+  \item[D1] \textbf{Decimation:} aliasing demonstration and polyphase-versus-direct equivalence with operation counts.
+  \item[D2] \textbf{Interpolation and rational resampling:} images, gain check and the 160/147 resampler with SNR versus SciPy.
+  \item[D3] \textbf{CIC filter:} integer implementation, response check, bit-growth experiment and compensation filter.
+  \item[D4] \textbf{DDC:} the three-stage chain with spectra at each stage and recovered audio tones.
+  \item[D5] \textbf{Channeliser and real data:} BPSK bit recovery and the CPU-budget table.
+  \item[D6] \textbf{Memo (250 words):} ``How much processing does a one-signal ground-station receiver need?'' Cite at least two external sources.
+  \item[Bonus] (a) Build a polyphase FFT channeliser that extracts all channels at once and compare its cost with separate DDCs. (b) Implement a Farrow fractional-delay resampler for asynchronous clock correction. (c) Capture ADS-B at 1090 MHz and decode a frame.
+\end{delivs}
+
+\section*{Learning Resources}
+\resourcegroup{Multirate Signal Processing}
+\begin{resources}
+  \item Crochiere, R.E., Rabiner, L.R. \emph{Multirate Digital Signal Processing}.
+  \item Vaidyanathan, P.P. \emph{Multirate Systems and Filter Banks}.
+  \item Oppenheim, A.V., Schafer, R.W. \emph{Discrete-Time Signal Processing}, Ch.~4.6--4.7 (changing the sampling rate) and Ch.~12 (polyphase).
+  \item Hogenauer, E.B. (1981). ``An economical class of digital filters for decimation and interpolation.'' IEEE Trans.\ Acoust.\ Speech Signal Process.\ 29, 155.
+\end{resources}
+\resourcegroup{Software-Defined Radio}
+\begin{resources}
+  \item Lyons, R.G. \emph{Understanding Digital Signal Processing}, Ch.~10 (sample-rate conversion) and Ch.~8 (quadrature signals).
+  \item RTL-SDR guides: \url{https://www.rtl-sdr.com}; GNU Radio tutorials: \url{https://wiki.gnuradio.org}
+\end{resources}
+\resourcegroup{Tools}
+\begin{resources}
+  \item SciPy \texttt{signal.resample\_poly}, \texttt{signal.decimate}, \texttt{signal.firwin}: \url{https://docs.scipy.org/doc/scipy/reference/signal.html}
+\end{resources}
+
+\evaluation
+\end{document}

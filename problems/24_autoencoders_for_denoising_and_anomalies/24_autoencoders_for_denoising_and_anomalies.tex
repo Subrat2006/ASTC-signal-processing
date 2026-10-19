@@ -1,0 +1,103 @@
+%% META id=24
+%% META slug=24_autoencoders_for_denoising_and_anomalies
+%% META title=Autoencoders for Denoising and Anomaly Detection
+%% META part=E
+%% META level=4
+%% META effort=16--22 hours
+%% META prereq=Problems 21, 22, 23
+%% META theory=Linear autoencoders and PCA, convolutional and denoising autoencoders, reconstruction-error anomaly scores, threshold selection, training contamination, bottleneck failure, variational autoencoders
+%% META skills=PyTorch autoencoders, PCA equivalence check, windowed time-series anomaly detection, threshold from null reconstruction errors, contamination and capacity studies, comparison with classical detectors
+\documentclass[11pt,a4paper]{article}
+\usepackage{spl}
+\begin{document}
+\splheader{24}{Autoencoders for Denoising and Anomalies}{Part E: Machine Learning for Signals \quad Level 4}%
+{Autoencoders, PCA Equivalence, Denoising, Reconstruction-Error Anomaly Detection, Contamination, VAE}%
+{Problems 21, 22, 23}{16--22 hours}
+
+\begin{summarybox}{Autoencoders: Learning What Normal Looks Like}
+An autoencoder compresses and reconstructs its input; trained on ordinary data only, it reconstructs ordinary data well and anomalies poorly. Prove numerically that a linear autoencoder is PCA, build convolutional and denoising versions, detect a burst in a light curve and odd spectra from reconstruction error, and run the experiments that show when the method silently fails: contaminated training data and a bottleneck that is too wide.
+\end{summarybox}
+
+\generalinstructions{24\_autoencoders\_for\_denoising\_and\_anomalies}
+
+\section*{Background and Motivation}
+In an anomaly-detection setting you rarely have labelled anomalies, but you often have plenty of ``normal'' data: months of quiet telemetry, thousands of ordinary stellar spectra, hours of burst-free background. An autoencoder learns to squeeze its input through a narrow bottleneck and expand it again. If the bottleneck is narrow enough, it can only represent patterns typical of the training data, and an input outside that family is reconstructed badly: the reconstruction error is the anomaly score. This is the idea behind the final stage of the gamma-ray-burst pipeline in your session notebook, which slides a 64-sample window along the normalised light curve and flags windows with large error.
+
+The same architecture trained with a noisy input and a clean target is a denoiser. Both uses carry traps: a bottleneck that is too wide copies everything, including anomalies; training data contaminated with the anomalies teaches the network to reconstruct them; and a threshold chosen on the wrong data produces false alarms by the thousand. These traps are the substance of this problem.
+
+\section*{Theoretical Framework}
+\subsection{Autoencoder}
+An encoder $\vect z=f_\theta(\vect x)\in\mathbb R^k$ and a decoder $\hat{\vect x}=g_\phi(\vect z)$ are trained to minimise the reconstruction loss $\mathcal L=\frac1N\sum_i\norm{\vect x_i-g_\phi(f_\theta(\vect x_i))}^2$. With a bottleneck $k<d$ the network learns a $k$-dimensional description. A \emph{denoising} autoencoder is trained on pairs (corrupted input, clean target); a \emph{convolutional} autoencoder uses convolution, pooling and up-sampling (or transposed convolution) layers and exploits translation structure.
+
+\subsection{Linear Autoencoder and PCA}
+For a linear autoencoder ($f$ and $g$ linear, no activation) with mean-centred data, the loss is minimised when the decoder spans the subspace of the $k$ leading principal components, and the minimum equals the PCA reconstruction error $\sum_{i>k}\lambda_i$ (sum of the discarded covariance eigenvalues). Gradient descent does not return the principal axes themselves, only the same \emph{subspace}; compare subspaces with principal angles.
+
+\subsection{Reconstruction-Error Anomaly Score}
+For a window $\vect x$ the score is $s(\vect x)=\frac1d\norm{\vect x-\hat{\vect x}}^2$. Choose the threshold from the distribution of scores on \emph{held-out normal data}, for example its $99.9$th percentile, or from the false-alarm requirement. Because scores of an anomaly depend on its scale, normalise each window (subtract the window median, divide by a robust scale or by the square root of the local mean for Poisson data).
+
+\subsection{Failure Modes}
+(i) \emph{Contamination:} if anomalies are present in the training data, the network learns to reconstruct them. (ii) \emph{Excess capacity:} with $k\ge d$ (or a highly expressive nonlinear decoder) the identity map is a solution and all inputs, anomalous or not, are reconstructed perfectly. (iii) \emph{Pointless sensitivity:} small distribution shifts in normal data (a drifting background) raise the error of normal windows.
+
+\subsection{Variational Autoencoder (bonus)}
+A VAE encodes to a distribution $q_\phi(\vect z|\vect x)=\mathcal N(\vect\mu,\diag\vect\sigma^2)$ and maximises the evidence lower bound $\mathbb E_q[\ln p_\theta(\vect x|\vect z)]-\mathrm{KL}\big(q_\phi(\vect z|\vect x)\,\|\,\mathcal N(0,\mathbf I)\big)$ using the reparametrisation $\vect z=\vect\mu+\vect\sigma\odot\vect\epsilon$.
+
+\section*{Data and Simulation Specification}
+\begin{simtable}
+Spectra & \texttt{sp\_common.synth.stellar\_spectra(n\_normal=2000, n\_anomalous=40, n\_bins=256)}: train on normal spectra only; test on 500 normal plus all anomalies; anomaly types: emission line, broad trough, cosmic-ray spikes.\\
+Light curve & \texttt{sp\_common.synth.grb\_event\_list}, binned at \s{0.5}; 200 burst-free light curves for training (different seeds, \texttt{amp=0}), test curves with injected \texttt{amp}$=10,30,100,300$; windows of 64 bins with stride 8; normalise each window with Anscombe transform and median removal.\\
+Denoising data & Windows of 128 samples containing a Gaussian pulse or a transit-like dip at random position and depth, with known clean target, noise levels $\sigma=0.1,0.2,0.5$.\\
+Framework & PyTorch on CPU; fixed seeds; at least three seeds for every reported number.\\
+Real data (strongly recommended) & AstroSat CZTI or Fermi GBM event file (as in problem 22), burst-free stretch for training; or SDSS optical spectra of stars (via the SDSS SkyServer or \texttt{astroquery}); or NASA SMAP/MSL spacecraft telemetry anomalies (Hundman et al., KDD 2018; data in the \texttt{telemanom} GitHub repository).
+\end{simtable}
+
+\section*{Your Task}
+\begin{tasks}
+  \item \textbf{Linear autoencoder versus PCA (Stage 2).} Train a linear autoencoder with $k=1,\dots,20$ hidden units on the normal spectra. Compare its reconstruction error with PCA's $\sum_{i>k}\lambda_i/d$ for each $k$ and compute the principal angles between the autoencoder decoder subspace and the PCA subspace. Explain the result and what changes when you add a ReLU.
+  \item \textbf{Convolutional autoencoder for spectra.} Build a 1D convolutional autoencoder with a bottleneck of size $k$ (sweep $k=2,4,8,16,32,64$). Plot the distribution of reconstruction errors for normal and anomalous spectra, report ROC AUC, average precision, and recall at a budget of 20 flagged spectra, per anomaly type, and compare with PCA error and Isolation Forest (problem 22).
+  \item \textbf{Denoising autoencoder.} Train on the pulse and dip windows with noise $\sigma=0.2$. Compare output SNR (\texttt{sp\_common.stats.snr\_db}) and peak-amplitude bias with the Savitzky--Golay filter, the running median and wavelet shrinkage (problem 18) and with the Wiener filter. Test at noise levels not seen in training.
+  \item \textbf{Burst detection in a light curve.} Train the window autoencoder (architecture of the session notebook: Conv1D with 32 and 16 filters of lengths 5 and 3, pooling, a small bottleneck and the mirrored decoder) on burst-free windows only. Compute window scores for the test curves, set the threshold at the $99.9$th percentile of the scores on held-out burst-free windows, map flagged windows back to time, and report efficiency versus injected \texttt{amp} and the false-alarm rate on 500 null curves (Wilson intervals). Compare with the $n$-sigma and DBSCAN detectors of problem 22 at the same false-alarm rate.
+  \item \textbf{Contamination study.} Retrain with $0\%$, $1\%$, $5\%$ and $20\%$ of the training windows containing bursts. Plot the efficiency at fixed false-alarm rate against contamination and explain the trend. Try a trimmed loss (ignore the highest-error $5\%$ of windows each epoch) or iterative self-cleaning and measure the recovery.
+  \item \textbf{Capacity and bottleneck failure.} Sweep the bottleneck from 2 to 128 for the window autoencoder and show the ROC AUC collapsing as $k$ approaches the window length; demonstrate that a deep nonlinear decoder can reconstruct the burst perfectly even at a small $k$ when trained long enough, so that the bottleneck alone is not a safeguard. Describe the safeguards you would use (early stopping on normal-only validation error, small capacity, ensembling).
+  \item \textbf{Real data and final verdict.} Apply the detector (autoencoder, plus the baseline $n$-sigma/DBSCAN detector of problem 22) to the real data. Report candidates with their scores and the null-calibrated false-alarm probabilities, use the agreement of independent methods as a consistency check, and state a verdict in the form ``detected, marginal or not detected'' with the supporting numbers.
+\end{tasks}
+
+\begin{checkpoint}
+A linear autoencoder with $k$ hidden units converges to the PCA error $\sum_{i>k}\lambda_i$ (to within optimisation error) and its decoder subspace has principal angles near $0^\circ$ to the PCA subspace. For $k=d$ the reconstruction error approaches zero for \emph{all} inputs. With a threshold at the $99.9$th percentile of normal scores, about $0.1\%$ of normal windows are flagged by construction; verify it on a fresh set.
+\end{checkpoint}
+
+\section*{Aerospace Application Link}
+Spacecraft produce far more telemetry than can be downlinked, and operators want novelty prioritised. Describe how you would deploy your autoencoder as an onboard novelty detector for housekeeping channels such as temperatures, currents and wheel speeds: the training data (flight-qualified normal operations), the input window, the thresholds and what to do on a flag (increase sampling rate, store a pre-trigger buffer, downlink first). Estimate its memory, computation per window and the number of false alerts per month you can tolerate, and compare it with a simple limit-checking scheme.
+
+\section*{Deliverables}
+\begin{delivs}
+  \item[D1] \textbf{Linear autoencoder versus PCA:} error curves and principal-angle results.
+  \item[D2] \textbf{Spectral anomaly detection:} convolutional autoencoder, score histograms, metrics, per-type recall and comparison with PCA and Isolation Forest.
+  \item[D3] \textbf{Denoising autoencoder:} the comparison table including amplitude bias.
+  \item[D4] \textbf{Burst detection:} the windowed autoencoder pipeline with efficiency-versus-amplitude and false-alarm statistics against the classical detectors.
+  \item[D5] \textbf{Failure-mode studies and real data:} contamination and capacity experiments, the real-data candidate table and the verdict.
+  \item[D6] \textbf{Memo (300 words):} ``Can we trust an unsupervised novelty detector on a spacecraft?'' Cite at least two external sources.
+  \item[Bonus] (a) Train a variational autoencoder, use the negative ELBO as the anomaly score and compare with the plain autoencoder. (b) Add a latent-space Mahalanobis score. (c) Build the detector in streaming mode with a one-window delay and measure the trigger latency.
+\end{delivs}
+
+\section*{Learning Resources}
+\resourcegroup{Autoencoders}
+\begin{resources}
+  \item Goodfellow, I., Bengio, Y., Courville, A. \emph{Deep Learning}, Ch.~14 (autoencoders).
+  \item Hinton, G.E., Salakhutdinov, R.R. (2006). ``Reducing the dimensionality of data with neural networks.'' Science 313, 504.
+  \item Vincent, P., Larochelle, H., Bengio, Y., Manzagol, P.-A. (2008). ``Extracting and composing robust features with denoising autoencoders.'' Proc.\ ICML, 1096.
+  \item Kingma, D.P., Welling, M. (2014). ``Auto-encoding variational Bayes.'' arXiv:1312.6114.
+\end{resources}
+\resourcegroup{Anomaly Detection in Science and Spacecraft}
+\begin{resources}
+  \item Hundman, K., Constantinou, V., Laporte, C., Colwell, I., Soderstrom, T. (2018). ``Detecting spacecraft anomalies using LSTMs and nonparametric dynamic thresholding.'' Proc.\ KDD, 387, arXiv:1802.04431.
+  \item Baron, D. (2019). ``Machine learning in astronomy: a practical overview.'' arXiv:1904.07248.
+  \item Chandola, V., Banerjee, A., Kumar, V. (2009). ``Anomaly detection: a survey.'' ACM Computing Surveys 41, 15.
+\end{resources}
+\resourcegroup{Data and Tools}
+\begin{resources}
+  \item SDSS SkyServer: \url{https://skyserver.sdss.org}; telemanom (SMAP/MSL data and code): \url{https://github.com/khundman/telemanom}
+  \item PyTorch: \url{https://pytorch.org/docs/stable/}
+\end{resources}
+
+\evaluation
+\end{document}

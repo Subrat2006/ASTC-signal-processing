@@ -1,0 +1,113 @@
+%% META id=08
+%% META slug=08_analog_filters
+%% META title=Analog Filters: From RC to Butterworth and Chebyshev
+%% META part=C
+%% META level=2
+%% META effort=10--14 hours
+%% META prereq=Problem 05
+%% META theory=First- and second-order filters, Bode response, Butterworth Chebyshev Bessel and elliptic families, group delay, Sallen--Key realisation, component tolerance, anti-alias filter specification
+%% META skills=Nodal analysis in NumPy, filter order from specifications, pole placement, Monte Carlo tolerance analysis, anti-alias filter design for a given ADC
+\documentclass[11pt,a4paper]{article}
+\usepackage{spl}
+\begin{document}
+\splheader{08}{Analog Filters}{Part C: Electronics for Signal Processing \quad Level 2}%
+{Analog Filter Theory, RC and Active Filters, Filter Families, Tolerance Analysis, Anti-Alias Design}%
+{Problem 05}{10--14 hours}
+
+\begin{summarybox}{Analog Filters: Shaping the Signal Before the Converter Sees It}
+Resistors, capacitors and an op-amp implement the transfer functions of problem 05 in hardware. Write your own circuit solver, design a Butterworth filter from a specification, compare the four classic approximations, realise a Sallen--Key stage with real component values, test how tolerances spoil it, and size the anti-alias filter that protects an ADC.
+\end{summarybox}
+
+\generalinstructions{08\_analog\_filters}
+
+\section*{Background and Motivation}
+Before a sensor voltage reaches an ADC it passes through an analog filter that removes noise and interference outside the band of interest and, most importantly, anything that would alias after sampling (problem 02). This filter is built from a handful of passive parts and an operational amplifier, and its few components must meet a specification on bandwidth, stopband attenuation, ripple and delay. The art is in choosing a filter family whose trade-offs match the application: Butterworth for a flat passband, Chebyshev for the steepest roll-off, Bessel for undistorted pulse shape, elliptic for the lowest order.
+
+In this problem you move between three levels: the transfer function, the circuit that realises it, and the real-world tolerance of its components. You will implement an AC circuit solver yourself, so the circuit analysis is not a black box.
+
+\section*{Theoretical Framework}
+\subsection{First-Order Filters}
+The RC low-pass is $H(s)=1/(1+sRC)$ with corner $f_c=1/(2\pi RC)$, magnitude $|H|=1/\sqrt{1+(f/f_c)^2}$, phase $-\arctan(f/f_c)$ and group delay $\tau_g=-\dd\phi/\dd\omega=RC/(1+(\omega RC)^2)$, equal to $RC$ at DC. Cascading two unbuffered RC stages loads the first and does not produce $1/(1+sRC)^2$; an op-amp buffer between them does.
+
+\subsection{Filter Families}
+\emph{Butterworth} (maximally flat): $|H(\jj\omega)|^2=1/(1+(\omega/\omega_c)^{2n})$, with the $n$ poles equally spaced on the left half of a circle of radius $\omega_c$ at angles $\theta_k=\pi(2k+n-1)/(2n)$, $k=1\dots n$. The order needed to meet a passband attenuation $A_p$ at $\omega_p$ and a stopband attenuation $A_s$ at $\omega_s$ is
+\begin{equation}
+  n\ \ge\ \frac{\log_{10}\!\big[(10^{A_s/10}-1)/(10^{A_p/10}-1)\big]}{2\log_{10}(\omega_s/\omega_p)}.
+  \label{eq:buttord}
+\end{equation}
+\emph{Chebyshev type I} trades passband ripple for a steeper edge; \emph{Bessel} has maximally flat group delay (best pulse fidelity, gentlest edge); \emph{elliptic} has ripple in both bands and the lowest order for a given specification but the worst phase.
+
+\subsection{Second-Order Sections and Sallen--Key}
+Any higher-order filter is a cascade of second-order sections $H(s)=\omega_0^2/(s^2+(\omega_0/Q)s+\omega_0^2)$. The unity-gain Sallen--Key low-pass (resistors $R_1$, $R_2$ in series, $C_2$ from the op-amp input to ground, $C_1$ from the junction to the output) has
+\begin{equation}
+  \omega_0=\frac1{\sqrt{R_1R_2C_1C_2}},\qquad Q=\frac{\sqrt{R_1R_2C_1C_2}}{C_2(R_1+R_2)}.
+  \label{eq:sk}
+\end{equation}
+With $R_1=R_2=R$ this gives $Q=\tfrac12\sqrt{C_1/C_2}$, so a Butterworth section ($Q=1/\sqrt2$) needs $C_1=2C_2$.
+
+\subsection{Modified Nodal Analysis}
+For a linear circuit at frequency $\omega$, write Kirchhoff's current law at every node with admittances $Y_R=1/R$ and $Y_C=\jj\omega C$ and solve $\mathbf Y(\omega)\mathbf v=\mathbf i$; an ideal op-amp (or buffer) is added as a constraint $v_+=v_-$ with an extra unknown for its output current.
+
+\subsection{Anti-Alias Specification}
+To protect a $B$-bit ADC sampling at $f_s$ a signal band up to $f_{\max}$, interferers at $f_s-f_{\max}$ must be attenuated below the quantisation floor, i.e.\ by at least about $6.02B+1.76\ \si{\decibel}$. A Butterworth filter of order $n$ attenuates by about $20n\log_{10}(f/f_c)$ dB far above its corner.
+
+\section*{Data and Simulation Specification}
+\begin{simtable}
+RC stage & $R=\kOhm{1.6}$, $C=\nF{100}$.\\
+Butterworth spec & Passband to \kHz{1} with at most \dB{1} loss; stopband from \kHz{4} with at least \dB{40}.\\
+Family comparison & Order 5, cutoff \kHz{1}; Chebyshev I with \dB{1} ripple, elliptic with \dB{1} ripple and \dB{40} stopband.\\
+Sallen--Key & Target 2nd-order Butterworth at \kHz{1}; $R_1=R_2=\kOhm{10}$; tolerance studies with 1\%, 5\% and 10\% parts, 5000 Monte Carlo trials.\\
+ADC & 12-bit, $f_s=\kHz{10}$, signal band $0$--\kHz{1}; alternative with $4\times$ oversampling ($f_s=\kHz{40}$).\\
+Measurement (real data) & Build the RC or Sallen--Key filter on a breadboard, drive it with a function generator (or the phone's tone generator and a sound-card line input) and measure gain and phase at 10--20 frequencies with an oscilloscope or sound-card recorder; export the table to CSV.
+\end{simtable}
+
+\section*{Your Task}
+\begin{tasks}
+  \item \textbf{First-order response (Stage 2).} Derive $|H|$, phase, group delay and the step response of the RC stage. Compute $f_c$ for the stated $R$ and $C$ and verify it against \texttt{scipy.signal.freqs}. Show that two unbuffered RC stages give a different response from $1/(1+sRC)^2$, with the exact transfer function derived by hand.
+  \item \textbf{Your own circuit solver.} Implement modified nodal analysis in NumPy for networks of resistors, capacitors and ideal op-amps and solve the AC response over a log frequency grid. Reproduce the RC filter, the unbuffered two-stage RC and the Sallen--Key stage, and compare with the analytic $H(s)$.
+  \item \textbf{Butterworth from specification.} Evaluate Eq.~\eqref{eq:buttord} for the stated specification, round up, compute the pole positions from the formula and plot them on the pole circle. Confirm the response with \texttt{scipy.signal.buttord} and \texttt{butter}. Show the passband, \dB{3} point and stopband on one annotated plot.
+  \item \textbf{Comparing the families.} For order 5 compute magnitude, phase, group delay and step response of Butterworth, Chebyshev I, Bessel and elliptic filters. Tabulate the roll-off at $2f_c$, peak group-delay variation and step overshoot, and say which you would pick for (a) an accelerometer channel that will be analysed spectrally, (b) a pulse-timing channel.
+  \item \textbf{Sallen--Key design and tolerance.} Pick component values from Eq.~\eqref{eq:sk} (round to E12 values) and verify $f_0$ and $Q$. Run the Monte Carlo tolerance study; plot the histograms of $f_0$ and $Q$ and the family of magnitude responses, and report the yield for $f_0$ within $\pm5\%$ and $Q$ within $\pm10\%$ at each tolerance.
+  \item \textbf{Anti-alias design.} For the 12-bit, \kHz{10} ADC, compute the attenuation required at $f_s-f_{\max}$ and the Butterworth order needed with a \kHz{1.2} corner. Repeat for $f_s=\kHz{40}$. Compare the group delay and passband droop at \kHz{1} of the two designs.
+  \item \textbf{Measurement.} Compare your measured gain and phase with the model, report the deviations and explain them with real component values (tolerance, op-amp bandwidth, source and load impedance).
+\end{tasks}
+
+\begin{checkpoint}
+$f_c=\Hz{994.7}$ for $\kOhm{1.6}$ and $\nF{100}$. The specification requires Butterworth order $n=4$ (formula value $3.81$). For the Sallen--Key section with $R=\kOhm{10}$: $C_2\approx\nF{11.25}$, $C_1\approx\nF{22.5}$ give $Q=0.7071$ exactly. For the ADC, the Butterworth attenuation at $\kHz{9}$ with a \kHz{1.2} corner is about \dB{70} for order 4 and \dB{87.5} for order 5; a 12-bit ADC needs about \dB{74}, so order 5 is required at $f_s=\kHz{10}$.
+\end{checkpoint}
+
+\section*{Aerospace Application Link}
+A rocket flight computer samples a \SI{16}{g} accelerometer at \kHz{2} to detect motor burnout (a sharp drop in acceleration) within \ms{10}. Using your Task~4 group-delay data, choose the filter family and order for the anti-alias filter so that the timing error stays under \ms{2} while the alias rejection requirement of Task~6 holds, and quantify the delay of a 5th-order Butterworth versus a 5th-order Bessel filter at a \Hz{400} corner.
+
+\section*{Deliverables}
+\begin{delivs}
+  \item[D1] \textbf{First-order analysis:} derivations, response plots, the unbuffered two-stage RC derivation.
+  \item[D2] \textbf{Circuit solver:} the MNA code with tests against analytic transfer functions.
+  \item[D3] \textbf{Filter design:} the Butterworth order calculation, pole plot and the four-family comparison table.
+  \item[D4] \textbf{Sallen--Key and tolerance:} E12 design, Monte Carlo histograms and yield table.
+  \item[D5] \textbf{Anti-alias and measurement:} the ADC filter requirements for both sample rates and the comparison of measured with modelled response.
+  \item[D6] \textbf{Memo (250 words):} ``Which anti-alias filter for the burnout detector?'' Cite at least two external sources.
+  \item[Bonus] (a) Add a finite op-amp gain--bandwidth product to your solver and show how it degrades a high-$Q$ stage. (b) Design a multiple-feedback band-pass and a state-variable filter. (c) Switched-capacitor filter: derive the equivalent resistor $1/(f_{\rm clk}C)$.
+\end{delivs}
+
+\section*{Learning Resources}
+\resourcegroup{Analog Filter Theory and Design}
+\begin{resources}
+  \item Sedra, A.S., Smith, K.C. \emph{Microelectronic Circuits}, chapter on filters and tuned amplifiers.
+  \item Schaumann, R., Van Valkenburg, M.E. \emph{Design of Analog Filters}.
+  \item Horowitz, P., Hill, W. \emph{The Art of Electronics}, chapter on active filters.
+  \item Analog Devices, \emph{Op Amp Applications Handbook} and the \emph{Active Filter Design} tutorials (free).
+\end{resources}
+\resourcegroup{Anti-Aliasing}
+\begin{resources}
+  \item Kester, W. (ed.) \emph{Data Conversion Handbook}, Analog Devices (anti-alias filter chapters).
+  \item Zumbahlen, H. (ed.) \emph{Linear Circuit Design Handbook}, Analog Devices (filter chapter).
+\end{resources}
+\resourcegroup{Tools}
+\begin{resources}
+  \item SciPy \texttt{scipy.signal} (\texttt{buttord}, \texttt{butter}, \texttt{cheby1}, \texttt{bessel}, \texttt{ellip}, \texttt{freqs}, \texttt{group\_delay}): \url{https://docs.scipy.org/doc/scipy/reference/signal.html}
+  \item ngspice (optional cross-check): \url{https://ngspice.sourceforge.io}
+\end{resources}
+
+\evaluation
+\end{document}

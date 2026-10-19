@@ -1,0 +1,111 @@
+%% META id=23
+%% META slug=23_deep_learning_for_signals
+%% META title=Deep Learning for Signals: 1D CNNs and Spectrogram Classifiers
+%% META part=E
+%% META level=4
+%% META effort=16--22 hours
+%% META prereq=Problems 17, 19, 21
+%% META theory=Neural network training, 1D convolution as learned FIR filtering, receptive field, spectrogram CNNs, augmentation, overfitting and learning curves, optimality limits versus matched filtering, calibration and out-of-distribution inputs
+%% META skills=PyTorch training loops, 1D and 2D CNN design, receptive-field and parameter counting, augmentation, learning curves, comparison with a matched-filter bank, saliency analysis
+\documentclass[11pt,a4paper]{article}
+\usepackage{spl}
+\begin{document}
+\splheader{23}{Deep Learning for Signals}{Part E: Machine Learning for Signals \quad Level 4}%
+{1D CNNs, Spectrogram CNNs, Augmentation, Learning Curves, Matched-Filter Benchmark, Calibration}%
+{Problems 17, 19, 21}{16--22 hours}
+
+\begin{summarybox}{Deep Learning for Signals: Learned Filters, Honest Benchmarks}
+A convolutional layer is a bank of FIR filters whose taps are learned. Train a 1D CNN on raw waveforms and a 2D CNN on spectrograms to classify glitch types in noise, inspect what the first layer learned, measure how the network degrades with SNR and training-set size, and, crucially, compare it with the optimal matched-filter detector to learn where deep learning can and cannot win.
+\end{summarybox}
+
+\generalinstructions{23\_deep\_learning\_for\_signals}
+
+\section*{Background and Motivation}
+Hand-crafted features (problem 21) require you to know what distinguishes the classes. When that knowledge is incomplete, or the signals are rich (transient shapes, time--frequency tracks), a convolutional neural network can learn the features directly from raw waveforms or spectrograms. But a network is a flexible function approximator, not a source of information: if a signal of known form is buried in Gaussian noise, the matched filter of problem 19 is provably optimal, and a network can at best approach it. Where networks genuinely help is when the signal model is unknown, when noise is non-Gaussian, or when many classes with complicated structure must be separated, as with the glitch classification of gravitational-wave detectors.
+
+This problem teaches the practice (training loops, validation, augmentation, regularisation, learning curves) and the sceptical habits that go with it: always run a strong classical baseline, test at SNRs beyond the training range, and ask what happens on inputs the network has never seen.
+
+\section*{Theoretical Framework}
+\subsection{Training}
+A classifier outputs class scores $\vect z$ and probabilities $p_c=\ee^{z_c}/\sum_j\ee^{z_j}$ (softmax). The cross-entropy loss over a batch is $\mathcal L=-\frac1B\sum_i\ln p_{y_i}(\vect x_i)$, minimised with minibatch gradient descent; Adam adapts the step per parameter. Watch training and validation loss: a growing gap signals overfitting; remedies are more data, augmentation, weight decay, dropout, smaller models and early stopping.
+
+\subsection{1D Convolution and Receptive Field}
+A 1D convolutional layer with $C_{\rm in}$ input channels, $C_{\rm out}$ output channels and kernel length $K$ computes $y_{c'}[n]=b_{c'}+\sum_{c}\sum_{k}w_{c',c}[k]\,x_c[n+k]$ (cross-correlation, as implemented in deep-learning libraries); it has $(C_{\rm in}K+1)\,C_{\rm out}$ parameters. Each kernel is an FIR filter, and its frequency response is the FFT of $w$. The receptive field of a stack of layers with kernel $K_\ell$ and cumulative stride $s_{\ell-1}$ is
+\begin{equation}
+  \mathrm{RF}=1+\sum_\ell(K_\ell-1)\prod_{j<\ell}s_j,
+  \label{eq:rf}
+\end{equation}
+which must cover the signal structure (a chirp lasting 0.5 s at \kHz{2} needs $\mathrm{RF}\gtrsim1000$ samples, or global pooling over a feature that integrates it).
+
+\subsection{Spectrogram Networks}
+Computing a log-magnitude spectrogram (problem 17) converts the signal into an image on which a 2D CNN can use translation equivariance in time and frequency. Whitening before the transform matters for coloured noise.
+
+\subsection{Augmentation}
+Random circular time shifts, amplitude scaling, polarity flips, and added noise at random SNR encode invariances the network should have; augmentations that change the label (for instance shifting a chirp out of the window) must be avoided.
+
+\subsection{Optimality Limits}
+For $H_0$: noise only against $H_1$: known signal plus Gaussian noise, no detector beats the matched filter at a given false-alarm rate (Neyman--Pearson, problem 19). A network trained for this task approaches the matched-filter ROC from below as data and capacity grow.
+
+\subsection{Calibration and Out-of-Distribution Inputs}
+Softmax probabilities are often over-confident. Temperature scaling divides the logits by a scalar $T$ fitted on a validation set. An input from a class never seen in training is still assigned to some class with high confidence unless an explicit rejection mechanism (a threshold on max probability or an energy score) is used.
+
+\section*{Data and Simulation Specification}
+\begin{simtable}
+Glitch data & \texttt{sp\_common.synth.glitch\_zoo(n\_per\_class=100, fs=2048, duration=1.0, snr\_range=(8,20))}: classes noise, chirp, blip, whistle in white noise; use $n=1000$ per class for the main experiments, a held-out test set of 2000 generated with a different seed and an SNR sweep set at fixed SNR $=4,6,\ldots,30$.\\
+Binary detection set & Chirp versus noise only, same generator; for the matched-filter comparison use the exact chirp templates (\texttt{newtonian\_chirp} with a bank over chirp mass) and \texttt{scipy.signal.correlate}.\\
+Bearing data & \texttt{sp\_common.synth.bearing\_dataset} with group split (problem 21).\\
+Framework & PyTorch (CPU is sufficient: models of fewer than $10^5$ parameters train in minutes). Fix all seeds (\texttt{torch.manual\_seed}) and report seed-to-seed variation over at least five seeds.\\
+Real data (choose one) & Gravity Spy glitch images and metadata from the Zenodo record linked at \texttt{gravityspy.org} (spectrogram classification of real interferometer glitches); or CWRU bearing segments as in problem 21.
+\end{simtable}
+
+\section*{Your Task}
+\begin{tasks}
+  \item \textbf{1D CNN (Stage 2).} Build a small 1D CNN (for example three blocks of Conv1d--BatchNorm--ReLU--MaxPool, then global average pooling and a linear layer). Train with Adam on the glitch data with a train/validation split, plot learning curves, report test accuracy and confusion matrix, and repeat over five seeds to give mean and standard deviation. Count parameters by hand with the formula in Section~2 and check with \texttt{sum(p.numel())}.
+  \item \textbf{Spectrogram CNN.} Compute log-spectrograms (window and hop chosen with the rule of problem 17), train a 2D CNN and compare accuracy, number of parameters and training time with the raw-waveform network. Test the effect of whitening and of the spectrogram window length.
+  \item \textbf{Receptive field and learned filters.} Compute the receptive field of your 1D network with Eq.~\eqref{eq:rf}. Plot the first-layer kernels and their FFT magnitudes and describe what bands they select. Find, by shrinking the architecture, the smallest network that reaches $95\%$ accuracy and relate its receptive field to the signal duration.
+  \item \textbf{Robustness and the matched-filter benchmark.} Evaluate accuracy versus SNR (test set at fixed SNR from 4 to 30) for networks trained on SNR 8--20; then train and test a binary chirp-versus-noise network and compare its ROC (at equal false-alarm rate, with Wilson intervals) with the matched-filter bank. State quantitatively how close the network gets to the optimum at SNR $=6$, $8$, $10$ and where it is far from it.
+  \item \textbf{Augmentation.} Train with time shift, amplitude scaling and noise augmentation and without; quantify accuracy on SNR outside the training range and on time-shifted test samples.
+  \item \textbf{Data efficiency and overfitting.} Train on $10,30,100,300,1000$ samples per class; plot the learning curve for the network and for the random forest on features (problem 21). Vary dropout and weight decay and show the effect on the gap between training and validation accuracy. Find the data size at which the network overtakes the feature-based model, if it does.
+  \item \textbf{Explainability, calibration and out-of-distribution.} Compute occlusion or gradient saliency maps for correctly classified examples and verify the network looks where the signal is. List and diagnose misclassified examples. Compute the expected calibration error before and after temperature scaling. Feed a new signal class (for example a sine burst or a frequency-modulated pulse) and measure the confidence of the (wrong) predictions; implement a rejection threshold and evaluate it.
+  \item \textbf{Real data and cost.} Train on your real dataset (or on the bearing data with group splits) and compare with the classical pipeline of problem 21. Report parameters, multiply--accumulate operations per prediction (compute by hand) and CPU inference time per sample.
+\end{tasks}
+
+\begin{checkpoint}
+A random guess on four balanced classes gives $25\%$. A \texttt{Conv1d} layer with $C_{\rm in}=8$, $C_{\rm out}=16$, $K=9$ has $(8\cdot9+1)\cdot16=1168$ parameters. For three blocks of a kernel-$9$ convolution followed by max-pooling (kernel $2$, stride $2$), Eq.~\eqref{eq:rf} gives $\mathrm{RF}=1+8+1+16+2+32+4=64$ samples. On the binary detection task the matched filter must lie on or above every network ROC curve (apart from sampling error).
+\end{checkpoint}
+
+\section*{Aerospace Application Link}
+A CubeSat has a CPU of a few hundred MHz and a power budget of a watt; an FPGA payload may run an int8 network. Using your parameter and operation counts state whether the network fits (memory in kilobytes at 32-bit and at int8, operations per second at one prediction per second per channel), what accuracy you lose when the weights are quantised to 8 bits (measure it by rounding your trained weights), and what happens when the on-orbit noise is not the Gaussian noise of the training set. Argue for or against flying the network instead of the matched-filter bank.
+
+\section*{Deliverables}
+\begin{delivs}
+  \item[D1] \textbf{1D CNN:} code, learning curves, confusion matrix, five-seed statistics and the parameter count check.
+  \item[D2] \textbf{Spectrogram CNN and receptive field:} comparison table, learned-filter plots, minimal architecture.
+  \item[D3] \textbf{Robustness and benchmark:} accuracy-versus-SNR plot and the network-versus-matched-filter ROC comparison.
+  \item[D4] \textbf{Augmentation and data efficiency:} the ablation and the learning curves versus the feature-based model.
+  \item[D5] \textbf{Explainability, calibration, out-of-distribution, real data and cost table.}
+  \item[D6] \textbf{Memo (300 words):} ``When should we fly a neural network instead of a matched filter?'' Cite at least two external sources.
+  \item[Bonus] (a) Quantise the network to int8 with post-training quantisation and measure the loss in accuracy. (b) Add a residual connection and a dilated convolution and compare receptive fields. (c) Train a small transformer encoder on the spectrogram patches and compare data efficiency.
+\end{delivs}
+
+\section*{Learning Resources}
+\resourcegroup{Deep Learning}
+\begin{resources}
+  \item Goodfellow, I., Bengio, Y., Courville, A. \emph{Deep Learning}, Ch.~9 (convolutional networks), Ch.~7 (regularisation), Ch.~8 (optimisation).
+  \item Kingma, D.P., Ba, J. (2015). ``Adam: a method for stochastic optimization.'' arXiv:1412.6980.
+  \item Guo, C., Pleiss, G., Sun, Y., Weinberger, K.Q. (2017). ``On calibration of modern neural networks.'' Proc.\ ICML, arXiv:1706.04599.
+  \item PyTorch tutorials: \url{https://pytorch.org/tutorials/}
+\end{resources}
+\resourcegroup{Time-Series and Signal Classification}
+\begin{resources}
+  \item Ismail Fawaz, H., Forestier, G., Weber, J., Idoumghar, L., Muller, P.-A. (2019). ``Deep learning for time series classification: a review.'' Data Min.\ Knowl.\ Discov.\ 33, 917, arXiv:1809.04356.
+  \item Zevin, M.\ et al.\ (2017). ``Gravity Spy: integrating Advanced LIGO detector characterization, machine learning, and citizen science.'' Class.\ Quantum Grav.\ 34, 064003.
+  \item George, D., Huerta, E.A. (2018). ``Deep learning for real-time gravitational wave detection and parameter estimation.'' Phys.\ Lett.\ B 778, 64, arXiv:1711.03121.
+\end{resources}
+\resourcegroup{Data and Tools}
+\begin{resources}
+  \item Gravity Spy: \url{https://gravityspy.org}; CWRU Bearing Data Center: \url{https://engineering.case.edu/bearingdatacenter}
+\end{resources}
+
+\evaluation
+\end{document}

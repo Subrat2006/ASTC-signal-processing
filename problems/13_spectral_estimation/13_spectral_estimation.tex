@@ -1,0 +1,119 @@
+%% META id=13
+%% META slug=13_spectral_estimation
+%% META title=Spectral Estimation: Welch, Multitaper and Lomb--Scargle
+%% META part=D
+%% META level=3
+%% META effort=12--16 hours
+%% META prereq=Problems 07, 12
+%% META theory=Periodogram bias and variance, Bartlett and Welch averaging, confidence intervals, multitaper estimation, coloured-noise slopes, Lomb--Scargle periodogram for uneven sampling, false-alarm probability
+%% META skills=Welch implementation and confidence intervals, DPSS multitaper, spectral slope fitting, Lomb--Scargle implementation, period search with aliases and false-alarm probability
+\documentclass[11pt,a4paper]{article}
+\usepackage{spl}
+\begin{document}
+\splheader{13}{Spectral Estimation}{Part D: Digital Signal Processing \quad Level 3}%
+{Periodogram, Welch, Multitaper, Lomb-Scargle Periodogram, Period Detection}%
+{Problems 07, 12}{12--16 hours}
+
+\begin{summarybox}{Spectral Estimation: From a Single Noisy Record to a Trustworthy Spectrum}
+The periodogram of a random signal is inconsistent: more data does not make it less noisy. Measure that scatter, fix it with Welch averaging and multitaper estimation, attach correct confidence intervals, read power-law slopes of coloured noise, and find the period of a pulsating star from unevenly sampled data with the Lomb--Scargle periodogram.
+\end{summarybox}
+
+\generalinstructions{13\_spectral\_estimation}
+
+\section*{Background and Motivation}
+Problem 12 showed what the DFT does to a deterministic signal. For noise and for signals that are only \emph{statistically} periodic, a different question arises: given one finite record, what is the underlying power spectral density, and how accurate is the estimate? The raw periodogram is an unbiased-looking but statistically useless estimate, because each frequency bin is a $\chi^2$ variable with just two degrees of freedom no matter how long the record. Averaging trades frequency resolution for variance; multitaper methods do so more efficiently.
+
+Astronomical and flight data add a complication: observations are rarely evenly spaced. A star is observed on clear nights; telemetry has dropouts. The FFT assumes uniform sampling, so the Lomb--Scargle periodogram is the standard tool, and its false-alarm probability is how a period is claimed as a detection.
+
+\section*{Theoretical Framework}
+\subsection{Periodogram}
+For a length-$N$ record with window $w$,
+\begin{equation}
+  \hat S_{\rm per}[k]=\frac{|X_w[k]|^2}{f_s\sum_nw[n]^2}\ (\text{two-sided}).
+  \label{eq:per}
+\end{equation}
+Its expectation is the true PSD convolved with the window's spectral kernel (leakage bias), and its variance is $\mathrm{Var}\{\hat S\}\approx S^2$ for Gaussian noise, independent of $N$: each bin is $S\,\chi^2_2/2$.
+
+\subsection{Bartlett and Welch}
+Splitting the record into $K$ segments of length $L$, windowing and averaging the periodograms reduces the variance by about $1/K$. Welch's method uses overlapping segments (50\% for Hann) for a better compromise; the resolution is set by the segment length, $\Delta f\approx\mathrm{ENBW}\cdot f_s/L$. With $\nu$ equivalent degrees of freedom ($\nu\approx2K$ for non-overlapping segments), a $(1-\alpha)$ confidence interval for the true PSD is
+\begin{equation}
+  \left[\frac{\nu\,\hat S}{\chi^2_{\nu,\,1-\alpha/2}},\ \frac{\nu\,\hat S}{\chi^2_{\nu,\,\alpha/2}}\right].
+  \label{eq:ci}
+\end{equation}
+For $K=10$ non-overlapping segments the $95\%$ interval is $[0.585,\,2.085]\,\hat S$.
+
+\subsection{Multitaper}
+The Thomson multitaper method averages the periodograms obtained with $K=2NW-1$ orthogonal discrete prolate spheroidal (DPSS) tapers of time-half-bandwidth product $NW$; it has low leakage (important for spectra with large dynamic range) and variance reduced by about $1/K$ without segmenting the record.
+
+\subsection{Coloured Noise}
+A process with $S(f)\propto f^{-\alpha}$ appears as a straight line of slope $-\alpha$ on a log--log plot. Steep spectra suffer from periodogram leakage, which flattens the high-frequency end unless a window with low side-lobes is used.
+
+\subsection{Lomb--Scargle}
+For observations $y_i$ at arbitrary times $t_i$ (mean subtracted), the Lomb--Scargle power at angular frequency $\omega$ is
+\begin{equation}
+  P(\omega)=\frac12\left\{\frac{\big[\sum_iy_i\cos\omega(t_i-\tau)\big]^2}{\sum_i\cos^2\omega(t_i-\tau)}+\frac{\big[\sum_iy_i\sin\omega(t_i-\tau)\big]^2}{\sum_i\sin^2\omega(t_i-\tau)}\right\},\quad
+  \tan2\omega\tau=\frac{\sum_i\sin2\omega t_i}{\sum_i\cos2\omega t_i}.
+  \label{eq:ls}
+\end{equation}
+It is equivalent to least-squares fitting of a sinusoid at each frequency. For pure Gaussian noise of variance $\sigma^2$ the normalised power $z=P(\omega)/\sigma^2$ is exponentially distributed with unit mean ($\Pr\{z>z_0\}=\ee^{-z_0}$), so the false-alarm probability of the highest peak among $N_f$ independent frequencies is $\mathrm{FAP}\approx1-(1-\ee^{-z})^{N_f}$. Uneven sampling imprints a \emph{spectral window} on the periodogram: sampling once per night produces aliases at $f_0\pm k\,\SI{1}{\per\day}$.
+
+\section*{Data and Simulation Specification}
+\begin{simtable}
+White and coloured noise & $f_s=\Hz{1000}$, $N=2^{12},\dots,2^{18}$; AR(4) process with a spectral dynamic range of about 80 dB (generate with a pole-zero design of your choice); $1/f^{\alpha}$ noise with $\alpha=1,2$.\\
+Line plus noise & Sinusoid at \Hz{123.4}, amplitude $0.05$, in white noise $\sigma=1$, $N=2^{16}$.\\
+Uneven star & \texttt{sp\_common.synth.uneven\_variable\_star(n=400, period=0.6, amp=0.25, noise=0.04, baseline\_days=800)}: nightly sampling with a seasonal gap.\\
+Light curve & \texttt{sp\_common.synth.transit\_lightcurve()} for the spectral window and detection of stellar variability near 11 and $\SI{5.3}{\day}$.\\
+Real data (choose one) & Monthly mean sunspot number from SILSO (find the $\approx11$-year cycle); AAVSO photometry of a pulsating variable star; a TESS light curve through \texttt{lightkurve}.
+\end{simtable}
+
+\section*{Your Task}
+\begin{tasks}
+  \item \textbf{Periodogram statistics (Stage 2).} For white noise with $N=2^{8},\dots,2^{16}$ show that the scatter of the periodogram bins does not decrease with $N$, that $\hat S/S$ is $\chi^2_2/2$ distributed (histogram and Kolmogorov--Smirnov test) and that the relative standard deviation is $1$.
+  \item \textbf{Welch from scratch.} Implement Bartlett and Welch estimators with window, overlap and detrending options. Verify against \texttt{scipy.signal.welch}. Plot the variance reduction against $K$ and the resolution loss, and add confidence intervals from Eq.~\eqref{eq:ci}; check their empirical coverage over 1000 realisations. Choose the segment length for the line-plus-noise signal and justify it.
+  \item \textbf{Leakage and dynamic range.} Estimate the high-dynamic-range AR(4) spectrum with the rectangular, Hann and Blackman--Harris windows and with Welch's method; show the leakage floor of each against the true PSD computed from the model.
+  \item \textbf{Multitaper.} Implement the multitaper estimator with \texttt{scipy.signal.windows.dpss} for $NW=2,3,4$. Compare bias and variance with Welch on the AR(4) spectrum and on the line-plus-noise signal; discuss the cost in resolution.
+  \item \textbf{Spectral slopes.} Estimate the exponent of the $1/f$ and $1/f^2$ noises on a log--log plot with a line fit and its uncertainty. Show the bias of the periodogram for $\alpha=2$ and its cure.
+  \item \textbf{Lomb--Scargle.} Implement Eq.~\eqref{eq:ls} directly and check against \texttt{scipy.signal.lombscargle}. Find the period of the synthetic star, display the spectral window, identify the one-per-day aliases, compute the false-alarm probability by bootstrap (shuffle the magnitudes, 1000 times) and compare with the analytic formula. Explain why the second harmonic of the star's non-sinusoidal light curve also appears.
+  \item \textbf{Real data.} Apply the appropriate estimator to your real series (Welch for the evenly spaced sunspot data, Lomb--Scargle for the uneven photometry). Report the period with an uncertainty from the peak width or a bootstrap and test the peak against the red-noise alternative.
+\end{tasks}
+
+\begin{checkpoint}
+For $K=10$ non-overlapping averages the $95\%$ confidence factors are $0.585$ and $2.085$. The synthetic star has $f_0=1/0.6=1.667$ cycles per day, with daily aliases at $0.667$ and $2.667$ cycles per day; the strongest peak must lie at $1.667\pm0.002$ cycles per day. For white noise of one-sided density $S$ every periodogram bin has relative standard deviation $1$.
+\end{checkpoint}
+
+\section*{Aerospace Application Link}
+Pointing jitter of a spacecraft telescope is specified as an RMS value over a band, computed by integrating the vibration PSD. From a gyro record (use the synthetic gyro of problem 01 or the machine signal of problem 12) estimate the PSD with Welch and multitaper, compute the cumulative RMS jitter as a function of frequency, and report the RMS in the band $1$--$\Hz{50}$ with its confidence interval. Identify the frequencies that contribute more than 50\% of the jitter and what you would change (isolation, wheel speed) to reduce it.
+
+\section*{Deliverables}
+\begin{delivs}
+  \item[D1] \textbf{Periodogram statistics:} scatter versus $N$, $\chi^2_2$ test.
+  \item[D2] \textbf{Welch implementation:} validation against SciPy, variance and resolution trade-off, confidence-interval coverage.
+  \item[D3] \textbf{Leakage and multitaper:} AR(4) spectral comparison and multitaper bias and variance study.
+  \item[D4] \textbf{Slopes and Lomb--Scargle:} slope fits with uncertainties, the Lomb--Scargle implementation, spectral window, alias identification and FAP.
+  \item[D5] \textbf{Real-data period or cycle analysis} with uncertainty and a red-noise significance test.
+  \item[D6] \textbf{Memo (250 words):} ``How do we claim a period is real?'' Include the false-alarm argument and cite at least two external sources.
+  \item[Bonus] (a) Implement the fast Lomb--Scargle algorithm of Press and Rybicki and benchmark it. (b) Add the floating-mean (generalised) Lomb--Scargle and compare for short records. (c) Perform spectral pre-whitening and CLEAN to find the second period in the star's signal.
+\end{delivs}
+
+\section*{Learning Resources}
+\resourcegroup{Spectral Estimation}
+\begin{resources}
+  \item Stoica, P., Moses, R. \emph{Spectral Analysis of Signals} (periodogram, Welch, Blackman--Tukey, parametric methods).
+  \item Welch, P.D. (1967). ``The use of fast Fourier transform for the estimation of power spectra.'' IEEE Trans.\ Audio Electroacoust.\ 15, 70.
+  \item Thomson, D.J. (1982). ``Spectrum estimation and harmonic analysis.'' Proc.\ IEEE 70, 1055.
+  \item Percival, D.B., Walden, A.T. \emph{Spectral Analysis for Physical Applications}.
+\end{resources}
+\resourcegroup{Uneven Sampling}
+\begin{resources}
+  \item Lomb, N.R. (1976). ``Least-squares frequency analysis of unequally spaced data.'' Astrophys.\ Space Sci.\ 39, 447.
+  \item Scargle, J.D. (1982). ``Studies in astronomical time series analysis. II.'' Astrophys.\ J.\ 263, 835.
+  \item VanderPlas, J.T. (2018). ``Understanding the Lomb--Scargle periodogram.'' Astrophys.\ J.\ Suppl.\ 236, 16, arXiv:1703.09824.
+\end{resources}
+\resourcegroup{Data and Tools}
+\begin{resources}
+  \item SILSO sunspot number: \url{https://www.sidc.be/SILSO/}; AAVSO data: \url{https://www.aavso.org}; MAST/TESS with Lightkurve: \url{https://lightkurve.github.io/lightkurve/}
+  \item SciPy \texttt{signal.welch}, \texttt{signal.windows.dpss}, \texttt{signal.lombscargle}: \url{https://docs.scipy.org/doc/scipy/reference/signal.html}
+\end{resources}
+
+\evaluation
+\end{document}

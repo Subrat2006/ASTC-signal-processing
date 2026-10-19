@@ -1,0 +1,105 @@
+%% META id=18
+%% META slug=18_denoising_and_data_cleaning
+%% META title=Denoising and Data Cleaning for Instrument Data
+%% META part=D
+%% META level=3
+%% META effort=14--18 hours
+%% META prereq=Problems 07, 14, 17
+%% META theory=Outlier detection, detrending and its bias, Savitzky--Golay smoothing, Wiener filter, wavelet shrinkage, variance-stabilising transforms, gap handling
+%% META skills=Robust sigma clipping, Hampel filtering, light-curve flattening with transit masking, Savitzky--Golay coefficient derivation, wavelet thresholding, bias-aware evaluation of cleaning
+\documentclass[11pt,a4paper]{article}
+\usepackage{spl}
+\begin{document}
+\splheader{18}{Denoising and Data Cleaning}{Part D: Digital Signal Processing \quad Level 3}%
+{Outlier Rejection, Detrending, Savitzky-Golay, Wiener Filter, Wavelet Denoising, Gap Handling}%
+{Problems 07, 14, 17}{14--18 hours}
+
+\begin{summarybox}{Denoising and Data Cleaning: Removing Noise Without Removing the Science}
+Every cleaning step can erase the signal you are after. On a synthetic exoplanet light curve with known truth, reject cosmic-ray outliers without clipping the transit, flatten stellar variability without eating the dip, derive the Savitzky--Golay filter, compare Wiener and wavelet denoising, and measure the \emph{bias} each step introduces, not just the noise it removes.
+\end{summarybox}
+
+\generalinstructions{18\_denoising\_and\_data\_cleaning}
+
+\section*{Background and Motivation}
+Raw instrument data is never ready for analysis. A space photometer's light curve contains cosmic-ray hits (isolated outliers), thermal and pointing systematics (slow trends), stellar variability, white noise and data gaps. Each can be handled, but each fix is a filter, and every filter distorts something. A median filter that is too short deletes a transit; a smoother that is too long lets the trend through; clipping the lowest points removes exactly the dips you are searching for.
+
+The remedy is to treat cleaning like any measurement: test it on data where the truth is known, and report not only the noise reduction but also the bias in the quantities of interest (here the transit depth and timing). This problem gives you the tools and, more importantly, the habit.
+
+\section*{Theoretical Framework}
+\subsection{Robust Statistics and Outlier Rejection}
+The sample standard deviation is inflated by outliers; use $\hat\sigma=1.4826\,\mathrm{MAD}$. \emph{Sigma clipping} iteratively removes points beyond $n\hat\sigma$ of a running centre; the \emph{Hampel filter} compares each point with the median of its neighbours and replaces it if $|x_i-\mathrm{med}|>n\cdot1.4826\,\mathrm{MAD}$. One-sided clipping (upper outliers only) protects negative features such as transits.
+
+\subsection{Detrending and Its Bias}
+A running median or spline of window $W$ removes variations slower than $\sim W$ and leaves faster ones. For a transit of duration $T_{\rm tr}$ the trend filter must satisfy $W\gtrsim3T_{\rm tr}$, otherwise it follows the dip and suppresses its depth. A better practice is to \emph{mask} in-transit points when fitting the trend.
+
+\subsection{Savitzky--Golay Filter}
+Fit a polynomial of degree $p$ by least squares to each window of $2m+1$ points and take its central value (or derivative). This is an FIR filter whose coefficients are the central row of $(\mathbf A^\top\mathbf A)^{-1}\mathbf A^\top$ with $A_{ij}=j^i$. For $p=2$, $2m+1=5$ the smoothing coefficients are $\frac1{35}(-3,\,12,\,17,\,12,\,-3)$. It preserves polynomial moments up to order $p$ and thus peak heights and widths better than a moving average.
+
+\subsection{Wiener Filter}
+For a signal with PSD $S_s$ in additive noise with PSD $S_n$, the linear filter that minimises the mean-square error is $H(f)=S_s(f)/(S_s(f)+S_n(f))$, with minimum error $\int S_sS_n/(S_s+S_n)\,\dd f$.
+
+\subsection{Wavelet Shrinkage}
+Take a DWT, shrink the detail coefficients with a soft threshold $\eta_\lambda(d)=\mathrm{sgn}(d)\max(|d|-\lambda,0)$ and invert. The universal threshold is $\lambda=\hat\sigma\sqrt{2\ln N}$ with $\hat\sigma=\mathrm{MAD}(d_1)/0.6745$ from the finest-level coefficients $d_1$. For Poisson data the Anscombe transform $y=2\sqrt{x+3/8}$ stabilises the variance to about $1$ so that Gaussian methods apply.
+
+\subsection{Gaps}
+Interpolating across gaps (linear, cubic, or Gaussian-process) invents data; mask gaps rather than fill them for any spectral analysis (problem 13 uses Lomb--Scargle precisely for this reason).
+
+\section*{Data and Simulation Specification}
+\begin{simtable}
+Light curve & \texttt{sp\_common.synth.transit\_lightcurve(days=90, cadence\_min=30, period=3.2, depth=0.01, duration\_h=3.0, noise\_ppm=400, variability\_ppm=3000, outlier\_frac=0.003, gap\_frac=0.05)}; the truth masks \texttt{in\_transit} and \texttt{outlier} and the clean transit model are returned.\\
+Narrow peak & Gaussian peak of width 5 samples and unit height in noise $\sigma=0.1$, for the Savitzky--Golay and moving-average comparison.\\
+Wiener test & Sinusoid ($\Hz{20}$, amplitude 1) plus coloured noise with a known PSD.\\
+Poisson data & \texttt{sp\_common.synth.grb\_event\_list(seed=7)} binned at \s{0.5}.\\
+Real data (choose one) & A Kepler or TESS light curve from MAST via \texttt{lightkurve}: Kepler-10 (as in the session notebook) or a deep-transit host such as Kepler-5 or WASP-18 (TESS), PDCSAP flux. A noisy ECG from PhysioNet (MIT-BIH, baseline wander and mains interference) is an alternative.
+\end{simtable}
+
+\section*{Your Task}
+\begin{tasks}
+  \item \textbf{Characterise the problems (Stage 2).} Plot the raw light curve, its histogram and its PSD (problem 13). Report the standard deviation and $1.4826\,\mathrm{MAD}$, the number of outliers, the fraction of cadences lost to gaps and the dominant trend timescales.
+  \item \textbf{Outlier rejection.} Implement two-sided sigma clipping, one-sided (upper) clipping, a Hampel filter and a running-median residual test. Using the truth mask compute true- and false-positive rates against threshold $n=2,\dots,8$, and the number of \emph{in-transit} points wrongly removed by each. Recommend a method and threshold.
+  \item \textbf{Detrending and bias.} Flatten the light curve with a running median and a smoothing spline for window lengths $W=0.3$ to $10$ days. For each, fit the transit depth by comparing the folded in-transit and out-of-transit means and plot the depth bias $\hat d/d$ against $W/T_{\rm tr}$; show the $W\gtrsim3T_{\rm tr}$ rule. Repeat with transit points masked in the trend fit.
+  \item \textbf{Savitzky--Golay.} Derive the $(5,2)$ smoothing coefficients by hand through the least-squares normal equations, implement the general design and compare with \texttt{scipy.signal.savgol\_coeffs}. On the narrow-peak data compare peak height and width preservation of the moving average and Savitzky--Golay for several windows, and estimate a first derivative.
+  \item \textbf{Wiener filter.} Build the Wiener filter for the sinusoid-in-coloured-noise problem from the known spectra, apply it, and compare the mean-square error with the theoretical minimum and with an ideal band-pass filter.
+  \item \textbf{Wavelet denoising.} Denoise the cleaned light curve with PyWavelets: choose the wavelet, level, hard versus soft thresholding and the universal threshold. Compare RMSE, output SNR (against the clean model, \texttt{sp\_common.stats.snr\_db}) and transit-depth bias with Savitzky--Golay and the running median. Apply the Anscombe transform to the GRB counts, denoise and invert.
+  \item \textbf{Pipeline and real data.} Assemble outlier masking, trend removal with transit masking, denoising and gap flagging into a documented pipeline. Report the final noise (ppm per cadence), the depth bias and the false-positive outlier rate on the synthetic data, then run the identical pipeline on your real light curve and show the phase-folded transit with an estimated depth and uncertainty.
+\end{tasks}
+
+\begin{checkpoint}
+The $(5,2)$ Savitzky--Golay smoothing coefficients are $(-3,12,17,12,-3)/35$. For $N=1024$ and unit noise the universal wavelet threshold is $\sqrt{2\ln1024}=3.72$. The Anscombe transform gives a variance of about $1$ for Poisson counts above $\approx4$. A running median with $W<T_{\rm tr}=\SI{0.125}{\day}$ leaves essentially no transit; the depth bias approaches $1$ only for $W\gtrsim3T_{\rm tr}$ (and always with masking).
+\end{checkpoint}
+
+\section*{Aerospace Application Link}
+A star tracker's CCD images contain cosmic-ray hits that look like stars; housekeeping telemetry contains spikes from bit errors and gaps from dropouts. Describe a lightweight onboard cleaning chain (median-of-three or Hampel on thermistor and gyro data, upper clipping on pixels, gap flags) with its computational cost, and quantify using your synthetic light curve what fraction of real events (transits, here, or genuine thermal excursions) a too-aggressive filter would remove. Recommend the filter length that keeps the loss below $1\%$.
+
+\section*{Deliverables}
+\begin{delivs}
+  \item[D1] \textbf{Data characterisation:} histogram, PSD, noise and outlier statistics.
+  \item[D2] \textbf{Outlier study:} the four methods with true/false-positive curves and the in-transit loss.
+  \item[D3] \textbf{Detrending bias:} depth bias versus window length with and without masking.
+  \item[D4] \textbf{Savitzky--Golay and Wiener:} derivation, comparison with SciPy, peak-preservation study, Wiener MSE versus theory.
+  \item[D5] \textbf{Wavelet denoising and pipeline:} method comparison table and the documented end-to-end pipeline with the real-data result.
+  \item[D6] \textbf{Memo (250 words):} ``How do we clean data without biasing the measurement?'' Cite at least two external sources.
+  \item[Bonus] (a) Implement a biweight location filter for detrending and compare. (b) Use a Gaussian process to interpolate gaps and compare with linear interpolation. (c) Implement SURE thresholding.
+\end{delivs}
+
+\section*{Learning Resources}
+\resourcegroup{Denoising Theory}
+\begin{resources}
+  \item Savitzky, A., Golay, M.J.E. (1964). ``Smoothing and differentiation of data by simplified least squares procedures.'' Anal.\ Chem.\ 36, 1627.
+  \item Donoho, D.L., Johnstone, I.M. (1994). ``Ideal spatial adaptation by wavelet shrinkage.'' Biometrika 81, 425.
+  \item Mallat, S. \emph{A Wavelet Tour of Signal Processing}, chapter on denoising by thresholding.
+  \item Kay, S.M. \emph{Fundamentals of Statistical Signal Processing, Vol.~III: Practical Algorithm Development} and Vol.~I (Wiener filtering).
+\end{resources}
+\resourcegroup{Astronomy and Light Curves}
+\begin{resources}
+  \item Borucki, W.J.\ et al.\ (2010). ``Kepler planet-detection mission: introduction and first results.'' Science 327, 977.
+  \item Lightkurve documentation (flattening, outlier removal, folding): \url{https://lightkurve.github.io/lightkurve/}; MAST archive: \url{https://archive.stsci.edu}
+  \item Anscombe, F.J. (1948). ``The transformation of Poisson, binomial and negative-binomial data.'' Biometrika 35, 246.
+\end{resources}
+\resourcegroup{Tools}
+\begin{resources}
+  \item SciPy \texttt{signal.savgol\_filter}, \texttt{signal.medfilt}; PyWavelets: \url{https://pywavelets.readthedocs.io}; PhysioNet MIT-BIH: \url{https://physionet.org/content/mitdb/1.0.0/}
+\end{resources}
+
+\evaluation
+\end{document}

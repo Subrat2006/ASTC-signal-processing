@@ -1,0 +1,120 @@
+%% META id=12
+%% META slug=12_dft_fft_and_windowing
+%% META title=DFT, FFT and Windowing
+%% META part=D
+%% META level=2
+%% META effort=12--16 hours
+%% META prereq=Problems 04, 06
+%% META theory=DFT definition and properties, radix-2 FFT, circular convolution, spectral leakage, window figures of merit, resolution, amplitude and PSD scaling, frequency estimation accuracy
+%% META skills=FFT implementation, timing and complexity analysis, leakage and scalloping measurement, correct spectral scaling, peak interpolation for frequency estimation
+\documentclass[11pt,a4paper]{article}
+\usepackage{spl}
+\begin{document}
+\splheader{12}{DFT, FFT and Windowing}{Part D: Digital Signal Processing \quad Level 2}%
+{Discrete Fourier Transform, Fast Fourier Transform, Spectral Leakage, Windows, Spectral Scaling}%
+{Problems 04, 06}{12--16 hours}
+
+\begin{summarybox}{DFT, FFT and Windowing: The Spectrum Your Computer Actually Computes}
+Write the FFT yourself and measure its speed-up, then learn every way the DFT misleads the unwary: leakage, scalloping, false resolution from zero-padding, wrong amplitude scales. Quantify the window trade-off numerically, resolve a weak tone beside a strong one, and estimate a shaft frequency to a fraction of a bin.
+\end{summarybox}
+
+\generalinstructions{12\_dft\_fft\_and\_windowing}
+
+\section*{Background and Motivation}
+The DFT turns $N$ samples into $N$ frequency values, and the FFT computes it in $\mathcal O(N\log N)$ operations instead of $\mathcal O(N^2)$, which is why spectral analysis is practical at all. But the DFT is not the Fourier transform of the signal; it is the transform of a \emph{finite, windowed, periodically extended} version of it. A sinusoid whose frequency is not exactly on a bin spills energy into all bins (\emph{leakage}); a tone's apparent height depends on where it falls between bins (\emph{scalloping}); zero-padding makes the plot smoother without adding resolution.
+
+Every spectrum you will ever show a colleague passes through these effects. This problem makes them quantitative: you will measure the properties of the common windows yourself, compare them with the textbook table, and learn to scale spectra correctly so that an amplitude of $1$ reads $1$ and a noise density reads in correct $\mathrm{V^2/Hz}$.
+
+\section*{Theoretical Framework}
+\subsection{DFT and Its Properties}
+\begin{equation}
+  X[k]=\sum_{n=0}^{N-1}x[n]\,\ee^{-\jj2\pi kn/N},\qquad x[n]=\frac1N\sum_{k=0}^{N-1}X[k]\,\ee^{\jj2\pi kn/N},\qquad f_k=k\frac{f_s}{N},\quad\Delta f=\frac{f_s}{N}.
+  \label{eq:dft}
+\end{equation}
+The DFT samples the DTFT at $N$ equally spaced points. Multiplication of DFTs corresponds to \emph{circular} convolution; linear convolution of sequences of lengths $L$ and $M$ needs zero-padding to $N\ge L+M-1$. Parseval: $\sum|x[n]|^2=\frac1N\sum|X[k]|^2$. For real $x$, $X[N-k]=X[k]^\ast$.
+
+\subsection{Radix-2 FFT}
+Splitting into even and odd samples, $X[k]=E[k]+W_N^kO[k]$ and $X[k+N/2]=E[k]-W_N^kO[k]$ with $W_N=\ee^{-\jj2\pi/N}$ and $E,O$ the DFTs of length $N/2$. Applied recursively this needs $\tfrac N2\log_2N$ complex multiplications.
+
+\subsection{Leakage and Windows}
+A finite record is the product of the signal and a rectangular window, so each spectral line is replaced by the window's transform. The sinusoid is leakage-free only if an integer number of periods fits the record. A window $w[n]$ trades main-lobe width against side-lobe level. Figures of merit (all in bins of width $f_s/N$): the \emph{coherent gain} $\sum w/N$, the \emph{equivalent noise bandwidth}
+\begin{equation}
+  \mathrm{ENBW}=\frac{N\sum_nw[n]^2}{\big(\sum_nw[n]\big)^2},
+  \label{eq:enbw}
+\end{equation}
+the \emph{scalloping loss} (response at a half-bin offset relative to the peak) and the peak side-lobe level. Approximate textbook values: rectangular $1.00$ bin, $3.92$ dB, $-13.3$ dB; Hann $1.50$, $1.42$ dB, $-31.5$ dB; Hamming $1.36$, $1.75$ dB, $-42.7$ dB; Blackman $1.73$, $1.10$ dB, $-58$ dB; Blackman--Harris $2.00$, $0.83$ dB, $-92$ dB; flat-top $3.77$, $0.01$ dB.
+
+\subsection{Resolution and Zero-Padding}
+Two equal tones are resolved if their spacing exceeds about the main-lobe width, $\Delta f\gtrsim\mathrm{ENBW}\cdot f_s/N$ (Rayleigh: $f_s/N$ for the rectangular window). Zero-padding to $N_{\rm fft}>N$ interpolates the DTFT but does not improve resolution.
+
+\subsection{Spectral Scaling}
+With window $w$, the amplitude spectrum of a sinusoid of amplitude $A$ peaks at $A\sum w/2$ in $|X[k]|$, so divide by $\sum w/2$ to read amplitude. For noise, the one-sided power spectral density is
+\begin{equation}
+  S_1[k]=\frac{2\,|X[k]|^2}{f_s\sum_nw[n]^2},\qquad \sigma^2\approx\sum_kS_1[k]\,\Delta f,
+  \label{eq:psd}
+\end{equation}
+and a white-noise record of variance $\sigma^2$ must read $2\sigma^2/f_s$.
+
+\subsection{Frequency Estimation}
+The peak bin gives frequency to $\pm\Delta f/2$. Parabolic interpolation of $\log|X|$ around the peak (or interpolation of the three largest bins) reaches a fraction of a bin; the Cram\'er--Rao bound for an unbiased estimate of a sinusoid's frequency scales as $\mathrm{var}(\hat f)\propto1/(\mathrm{SNR}\cdot N^3)$.
+
+\section*{Data and Simulation Specification}
+\begin{simtable}
+FFT timing & $N=2^6,\dots,2^{14}$; compare your recursive FFT, a naive $\mathcal O(N^2)$ DFT matrix and \texttt{numpy.fft}.\\
+Leakage tests & $f_s=\Hz{1000}$, $N=256$; tones at \Hz{100} (bin-centred: $f=k\cdot f_s/N$ for an integer $k$ near this value) and at an off-bin frequency; offset sweep $0$--$0.5$ bin.\\
+Two-tone test & \Hz{100} amplitude $1$ and \Hz{115} amplitude $0.05$ ($-26$ dB), $N=256$, $f_s=\Hz{1000}$, all windows of the table.\\
+Scaling tests & Sine amplitude $A=1$; white noise with $\sigma=0.5$, $f_s=\Hz{1000}$.\\
+Machine signal & \texttt{sp\_common.synth.bearing\_vibration(fault="none", shaft\_hz=29.95, fs=12000, duration=10)}.\\
+Real data (choose one) & CWRU normal-baseline drive-end record (\kHz{12}); Phyphox audio/accelerometer of a running fan; the 1 kHz test tone of a function generator through a sound card.
+\end{simtable}
+
+\section*{Your Task}
+\begin{tasks}
+  \item \textbf{DFT and FFT from scratch (Stage 2).} Implement the DFT as a matrix product and a recursive radix-2 FFT. Verify against \texttt{numpy.fft.fft} to machine precision. Time all three for $N=2^6\ldots2^{14}$ on log--log axes, fit the slopes (about 2 for the matrix DFT, about 1 for the FFT) and count complex multiplications.
+  \item \textbf{Properties.} Verify numerically: circular time shift gives a phase ramp; Parseval; conjugate symmetry for real input; and that multiplying DFTs equals circular convolution. Compute a linear convolution via zero-padded DFTs and implement overlap-add for a long record; find the length at which the FFT method overtakes direct convolution.
+  \item \textbf{Leakage and window metrics.} Show the spectrum of a bin-centred and an off-bin sinusoid for each window. Compute coherent gain, ENBW, scalloping loss and peak side-lobe level of all six windows from their own zero-padded DFTs (zero-pad by at least $16\times$) and tabulate them against the textbook values above.
+  \item \textbf{Scalloping curve.} Sweep the tone frequency across half a bin and plot the measured amplitude error versus offset for the rectangular, Hann and flat-top windows. Use the flat-top window to measure amplitude to $<0.05$ dB at any offset.
+  \item \textbf{Resolution.} Determine which windows resolve the two-tone signal and report the dynamic-range versus resolution trade-off. For two equal tones find the minimum spacing resolved by the rectangular and Hann windows for $N=64,128,256,512$ and compare with $\mathrm{ENBW}\cdot f_s/N$. Show that zero-padding alone does not help.
+  \item \textbf{Scaling.} Implement correctly scaled amplitude and one-sided PSD spectra (Eq.~\eqref{eq:psd}). Confirm that a unit sine reads $1$ (flat-top or coherent-gain-corrected) and white noise reads $2\sigma^2/f_s$, and that $\sum S_1\Delta f=\sigma^2$ for every window.
+  \item \textbf{Frequency estimation.} Estimate the shaft frequency of the machine signal by peak picking, zero-padding and parabolic interpolation; plot the RMS frequency error against SNR and against $N$ on log--log axes for a synthetic tone in noise and compare the $N$ scaling with the Cram\'er--Rao behaviour ($N^{-3}$ in variance). Repeat on the real record.
+\end{tasks}
+
+\begin{checkpoint}
+The window table you compute must agree with the textbook values to about $\pm0.02$ in ENBW and $\pm0.05$ dB in scalloping. A rectangular-window tone at a half-bin offset reads $3.92$ dB low; Hann reads $1.42$ dB low; the flat-top window $0.01$ dB. White noise of $\sigma=0.5$ at $f_s=\Hz{1000}$ reads $5\times10^{-4}\,\mathrm{V^2/Hz}$ one-sided. The FFT beats the matrix DFT by a factor of order $N/\log_2N$.
+\end{checkpoint}
+
+\section*{Aerospace Application Link}
+A rocket-engine test stand records chamber-pressure oscillations at $f_s=\kHz{5}$. Combustion instability must be reported with a frequency accuracy of \Hz{0.1} and an amplitude accuracy of 5\%. Using your results choose the record length, window and interpolation method that meet both requirements for a signal at an unknown frequency near \Hz{1200}, and compute the shortest record that does it. Explain why a flat-top window is the wrong choice for locating the frequency but the right one for reading the amplitude.
+
+\section*{Deliverables}
+\begin{delivs}
+  \item[D1] \textbf{FFT notebook:} DFT matrix, recursive FFT, timing plot with fitted slopes and operation counts.
+  \item[D2] \textbf{Properties:} the four verified properties and the overlap-add crossover.
+  \item[D3] \textbf{Window study:} computed window metrics versus table, the scalloping curves.
+  \item[D4] \textbf{Resolution and scaling:} the two-tone resolution table, minimum spacing versus $N$, and the scaling verification.
+  \item[D5] \textbf{Frequency estimation:} error-versus-SNR and error-versus-$N$ plots, real-data result.
+  \item[D6] \textbf{Memo (250 words):} ``Which window, record length and interpolation for the stand test?'' Cite at least two external sources.
+  \item[Bonus] (a) Implement a split-radix or radix-4 FFT and count multiplications. (b) Implement the Bluestein algorithm for non-power-of-two lengths. (c) Compare parabolic, Jacobsen and Quinn estimators with the Cram\'er--Rao bound.
+\end{delivs}
+
+\section*{Learning Resources}
+\resourcegroup{DFT, FFT and Windows}
+\begin{resources}
+  \item Oppenheim, A.V., Schafer, R.W. \emph{Discrete-Time Signal Processing}, Ch.~8 (DFT) and Ch.~9 (FFT).
+  \item Harris, F.J. (1978). ``On the use of windows for harmonic analysis with the discrete Fourier transform.'' Proc.\ IEEE 66, 51.
+  \item Cooley, J.W., Tukey, J.W. (1965). ``An algorithm for the machine calculation of complex Fourier series.'' Math.\ Comput.\ 19, 297.
+\end{resources}
+\resourcegroup{Practice and Estimation}
+\begin{resources}
+  \item Lyons, R.G. \emph{Understanding Digital Signal Processing}, Ch.~3--4 (DFT, FFT, windows).
+  \item Heinzel, G., R\"udiger, A., Schilling, R. (2002). \emph{Spectrum and spectral density estimation by the discrete Fourier transform, including a comprehensive list of window functions and some new flat-top windows}, Max Planck Institute technical note.
+  \item Kay, S.M. \emph{Fundamentals of Statistical Signal Processing, Vol.~I: Estimation Theory}, Ch.~3 (Cram\'er--Rao bound; sinusoidal parameter estimation).
+\end{resources}
+\resourcegroup{Tools}
+\begin{resources}
+  \item NumPy FFT, SciPy windows: \url{https://numpy.org/doc/stable/reference/routines.fft.html}, \url{https://docs.scipy.org/doc/scipy/reference/signal.windows.html}
+  \item CWRU Bearing Data Center: \url{https://engineering.case.edu/bearingdatacenter}
+\end{resources}
+
+\evaluation
+\end{document}

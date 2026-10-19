@@ -1,0 +1,116 @@
+%% META id=10
+%% META slug=10_adc_dac_and_quantisation
+%% META title=ADC and DAC: Quantisation and Sigma-Delta
+%% META part=C
+%% META level=2
+%% META effort=10--14 hours
+%% META prereq=Problems 02, 07
+%% META theory=Uniform quantisation and SQNR, dither, ENOB and SINAD, INL and DNL, oversampling, noise shaping and sigma-delta modulators, zero-order-hold DAC
+%% META skills=Quantiser simulation, spectral SINAD and ENOB measurement, code-density test, sigma-delta modulator coding, DAC droop compensation, data-rate budgeting
+\documentclass[11pt,a4paper]{article}
+\usepackage{spl}
+\begin{document}
+\splheader{10}{ADC and DAC: Quantisation, SQNR and Sigma-Delta}{Part C: Electronics for Signal Processing \quad Level 2}%
+{Analog-to-Digital and Digital-to-Analog Conversion, Quantisation Noise, Dither, Oversampling, Sigma-Delta Modulation}%
+{Problems 02, 07}{10--14 hours}
+
+\begin{summarybox}{ADC and DAC: Where the Analog World Becomes Numbers}
+Every bit costs money, power and telemetry bandwidth. Build a quantiser and measure $6.02B+1.76$ dB, see why a quiet signal produces harmonics instead of noise and how dither cures it, extract ENOB and INL/DNL from simulated converters, trade speed for resolution with oversampling and a sigma-delta modulator, and choose a converter for a vibration channel under a $9.6$ kbit/s downlink.
+\end{summarybox}
+
+\generalinstructions{10\_adc\_dac\_and\_quantisation}
+
+\section*{Background and Motivation}
+An ADC performs two operations, sampling (problem 02) and quantisation: it replaces a continuous voltage by one of $2^B$ levels. The rounding error acts like additive noise, and the resulting signal-to-quantisation-noise ratio grows by about \dB{6} per bit. Real converters add thermal noise, nonlinearity, clock jitter and missing codes, so the \emph{effective} number of bits (ENOB) is always lower than the nominal $B$. A sigma-delta converter reaches 24 bits not by being extremely accurate but by sampling a one-bit quantiser very fast and shaping its noise out of the signal band.
+
+The converter is also a data-rate decision. A spacecraft that digitises three accelerometer axes at \kHz{1} with 16 bits produces \SI{48}{\kilo bit\per\second}, far above a UHF CubeSat link of \SI{9.6}{\kilo bit\per\second}; the converter choice and the onboard processing determine what can be downlinked at all.
+
+\section*{Theoretical Framework}
+\subsection{Uniform Quantisation}
+A mid-tread $B$-bit quantiser with full-scale range $[-V_{\rm ref},V_{\rm ref}]$ has step $\Delta=2V_{\rm ref}/2^B$. When the signal is busy enough, the error is uniform on $[-\Delta/2,\Delta/2]$, white, uncorrelated with the signal, with power $\Delta^2/12$. For a full-scale sine ($P_s=V_{\rm ref}^2/2$),
+\begin{equation}
+  \mathrm{SQNR}=\frac{V_{\rm ref}^2/2}{\Delta^2/12}\ \to\ 6.02\,B+1.76\ \si{\decibel}.
+  \label{eq:sqnr}
+\end{equation}
+For other inputs the constant differs (a Gaussian input with loading factor $V_{\rm ref}/\sigma$ trades clipping against resolution).
+
+\subsection{Dither}
+For small or slowly varying signals the error is not noise-like; it is a distorted copy of the signal and appears as harmonics. Adding a small random \emph{dither} before quantisation decorrelates the error. Triangular-PDF dither of $\pm1$ LSB has variance $\Delta^2/6$, so the total noise is $\Delta^2/12+\Delta^2/6$ (\dB{4.77} more than undithered noise) but harmonics become a flat noise floor.
+
+\subsection{Dynamic Metrics, INL and DNL}
+SINAD is the ratio of signal power to everything else (noise and distortion), SFDR the ratio of the signal to the largest spur, and
+\begin{equation}
+  \mathrm{ENOB}=\frac{\mathrm{SINAD}-1.76}{6.02}.
+  \label{eq:enob}
+\end{equation}
+Static errors: differential nonlinearity DNL$[k]=(W_k-\Delta)/\Delta$ for code width $W_k$, and integral nonlinearity INL$[k]=\sum_{j\le k}\mathrm{DNL}[j]$. DNL $=-1$ means a missing code. The \emph{code-density} (histogram) test estimates the widths from the count of samples in each code when a slowly varying known input (a ramp or a sine) is applied.
+
+\subsection{Oversampling and Noise Shaping}
+Sampling at $\mathrm{OSR}\times$ the Nyquist rate spreads the quantisation noise over a wider band; filtering to the signal band keeps only $1/\mathrm{OSR}$ of it ($+3.01$ dB, i.e.\ half a bit, per doubling), provided the noise is white. A first-order sigma-delta modulator has noise transfer function $\mathrm{NTF}(z)=1-z^{-1}$; a second-order one $(1-z^{-1})^2$. For an $L$th-order modulator with an $N$-bit internal quantiser,
+\begin{equation}
+  \mathrm{SQNR}\approx6.02N+1.76-10\log_{10}\!\frac{\pi^{2L}}{2L+1}+(20L+10)\log_{10}\mathrm{OSR}\ \ \si{\decibel},
+  \label{eq:sd}
+\end{equation}
+i.e.\ $9L+3$ dB per octave of OSR.
+
+\subsection{DAC and Zero-Order Hold}
+A DAC holds each value for $T_s$, multiplying the spectrum by $\sinc(f/f_s)$: droop of $\dB{-0.91}$ at $f_s/4$, $\dB{-3.92}$ at $f_s/2$, and images around multiples of $f_s$ that an analog reconstruction filter must remove.
+
+\section*{Data and Simulation Specification}
+\begin{simtable}
+Quantiser tests & Full-scale sine $f=\Hz{1013.7}$ (choose a coherent frequency: an integer number of cycles, relatively prime to $N$, in $N=2^{14}$ samples at $f_s=\kHz{48}$), $B=2,\dots,16$; Gaussian input with loading factors $2$--$5$.\\
+Dither & Sine at $-40$ dBFS, $B=10$, undithered and TPDF dithered.\\
+Non-ideal ADC & 10 bits, input noise $0.5$ LSB RMS, third-order INL bow of $1$ LSB; 6-bit device with random DNL of $0.2$ LSB RMS for the code-density test (ramp of $2^{20}$ samples).\\
+Sigma-delta & First- and second-order, 1-bit, OSR $=8,16,32,64,128$, input sine at $f_s/(4\,\mathrm{OSR})$ with amplitude $0.5$.\\
+DAC & \kHz{1} sine from $f_s=\kHz{8}$ and from $8\times$ oversampled data.\\
+Real data (optional) & Sound-card loop-back: play a \kHz{1} sine from a tone generator into the line input (or record a tone from a speaker), capture at 16-bit and, if available, 24-bit and compute SINAD and ENOB with your own code.
+\end{simtable}
+
+\section*{Your Task}
+\begin{tasks}
+  \item \textbf{Quantiser and SQNR (Stage 2).} Implement a $B$-bit mid-tread quantiser with clipping. Verify that the error is uniform with power $\Delta^2/12$ and plot SQNR against $B$ for a full-scale sine against Eq.~\eqref{eq:sqnr}. Repeat for a Gaussian input and find the loading factor that maximises SQNR.
+  \item \textbf{Spectra, harmonics and dither.} Compute SINAD, SFDR and the spectrum of the quantised sine with coherent sampling. Show that at $-40$ dBFS and $B=10$ the error is dominated by harmonics, then add TPDF dither and verify the harmonics vanish and the noise floor rises by $4.77$ dB (measure it).
+  \item \textbf{ENOB of a non-ideal converter.} Add thermal noise and INL bow to a 10-bit quantiser. Plot SINAD and ENOB against input amplitude from $-60$ to $0$ dBFS and against input frequency if you add the jitter model of problem 02. Explain the ENOB-versus-amplitude curve.
+  \item \textbf{INL and DNL by code density.} Simulate the 6-bit converter with random code widths, apply the ramp, and recover DNL and INL from the histogram. Compare with the truth, identify any missing codes and quantify the estimator error versus number of samples.
+  \item \textbf{Oversampling.} Quantise a noisy sine at OSR $=1,4,16,64$ with 8 bits, low-pass filter and decimate. Verify the $+3$ dB per octave improvement when thermal noise exceeds 1 LSB and show that it fails without noise or dither.
+  \item \textbf{Sigma-delta modulator.} Implement the first- and second-order 1-bit modulators. Plot the bitstream spectrum showing noise shaping, decimate with an ideal brick-wall filter in the FFT domain (and later with a CIC filter in problem 16) and plot SQNR versus OSR. Fit the slopes ($9$ and $15$ dB per octave) and compare with Eq.~\eqref{eq:sd}.
+  \item \textbf{DAC reconstruction.} Verify the ZOH droop at $f_s/4$ and $f_s/2$, display the images, and show how $8\times$ oversampling relaxes the analog reconstruction-filter order. Design a short FIR that compensates the droop.
+\end{tasks}
+
+\begin{checkpoint}
+$B=12$: $74.0$ dB; $B=16$: $98.1$ dB; $B=24$: $146.2$ dB (ideal). TPDF dither raises the noise floor by $10\log_{10}3=4.77$ dB. ZOH droop: $-0.91$ dB at $f_s/4$, $-3.92$ dB at $f_s/2$. For a \emph{full-scale} sine at OSR $=64$ Eq.~\eqref{eq:sd} gives about $56.8$ dB (first order) and $85.2$ dB (second order). Your simulation will come out lower: driving the 1-bit loop at amplitude $0.5$ costs $6$ dB by itself, and the linear noise model is optimistic for a 1-bit quantiser, so values of roughly $45$--$51$ dB (first order) and $68$--$79$ dB (second order) are normal. The robust check is the \emph{slope}: about $9$ dB per octave of OSR for the first-order and $15$ dB per octave for the second-order modulator.
+\end{checkpoint}
+
+\section*{Aerospace Application Link}
+An engine-test accelerometer channel must resolve \SI{5}{\milli g} detail on top of $\pm\SI{50}{g}$ peaks, a dynamic range of about \dB{80} in amplitude before any noise margin. Select the converter: compute the minimum ENOB and compare 16-bit SAR and 24-bit sigma-delta devices of your choice. Then compute the raw data rate of three axes at \kHz{1} and the compression factor (decimation, event-triggered capture, feature extraction from problem 21) needed to fit a \SI{9.6}{\kilo bit\per\second} downlink, and the maximum record you can transmit during one 8-minute ground-station pass.
+
+\section*{Deliverables}
+\begin{delivs}
+  \item[D1] \textbf{Quantiser notebook:} error statistics and the SQNR-versus-$B$ plots for sine and Gaussian inputs.
+  \item[D2] \textbf{Dither study:} spectra with and without dither, measured noise increase.
+  \item[D3] \textbf{ENOB and INL/DNL:} the amplitude sweep and the code-density test with true versus estimated DNL/INL.
+  \item[D4] \textbf{Oversampling and sigma-delta:} the 3-dB-per-octave verification, bitstream spectra and SQNR-versus-OSR fits.
+  \item[D5] \textbf{DAC study:} droop, images and the compensation filter.
+  \item[D6] \textbf{Memo (250 words):} ``Which converter and which data-reduction scheme for the engine-test channel?'' Cite at least two external sources.
+  \item[Bonus] (a) Implement a MASH 1-1 modulator and compare with the second-order loop. (b) Add a thermal-noise and jitter model and find the sampling frequency above which jitter dominates your ENOB. (c) Implement a successive-approximation ADC with capacitor mismatch and observe the resulting DNL pattern.
+\end{delivs}
+
+\section*{Learning Resources}
+\resourcegroup{Converters}
+\begin{resources}
+  \item Kester, W. (ed.) \emph{Data Conversion Handbook}, Analog Devices (quantisation, ENOB, dither, sigma-delta); free from the Analog Devices website.
+  \item Schreier, R., Temes, G.C. \emph{Understanding Delta-Sigma Data Converters} (noise shaping and SQNR formulas).
+  \item IEEE Std 1241, \emph{IEEE Standard for Terminology and Test Methods for Analog-to-Digital Converters}.
+\end{resources}
+\resourcegroup{Theory and Practice}
+\begin{resources}
+  \item Oppenheim, A.V., Schafer, R.W. \emph{Discrete-Time Signal Processing}, Ch.~4.8--4.9 (quantisation noise, oversampling and noise shaping).
+  \item Lipshitz, S.P., Wannamaker, R.A., Vanderkooy, J. (1992). ``Quantization and dither: a theoretical survey.'' J.\ Audio Eng.\ Soc.\ 40, 355.
+\end{resources}
+\resourcegroup{Tools}
+\begin{resources}
+  \item NumPy FFT and SciPy signal: \url{https://numpy.org/doc/stable/reference/routines.fft.html}, \url{https://docs.scipy.org/doc/scipy/reference/signal.html}
+\end{resources}
+
+\evaluation
+\end{document}

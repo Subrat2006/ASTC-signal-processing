@@ -1,0 +1,115 @@
+%% META id=20
+%% META slug=20_adaptive_filters_and_kalman_estimation
+%% META title=Adaptive Filters and Kalman State Estimation
+%% META part=D
+%% META level=4
+%% META effort=16--22 hours
+%% META prereq=Problems 06, 07, 14
+%% META theory=Wiener solution, LMS NLMS and RLS, adaptive noise cancellation, Kalman filter equations, constant-velocity and IMU/GPS models, consistency tests, dead-reckoning drift
+%% META skills=LMS and RLS implementation, noise canceller design, Kalman filter coding from scratch, IMU/GPS fusion with bias state, NIS and NEES consistency tests, Allan-variance-based tuning
+\documentclass[11pt,a4paper]{article}
+\usepackage{spl}
+\begin{document}
+\splheader{20}{Adaptive Filters and Kalman Estimation}{Part D: Digital Signal Processing \quad Level 4}%
+{LMS, NLMS, RLS, Noise Cancellation, Kalman Filter, IMU and GPS Sensor Fusion}%
+{Problems 06, 07, 14}{16--22 hours}
+
+\begin{summarybox}{Adaptive Filters and Kalman Estimation: Filters That Learn, and Estimators That Know Their Own Uncertainty}
+When the noise statistics are not known in advance, or the quantity of interest is a hidden state, fixed filters are not enough. Implement LMS, NLMS and RLS, cancel engine noise from a sensor, write a Kalman filter from scratch, fuse a drifting accelerometer with GPS, ride through a GPS outage, and check that your filter's uncertainty is honest.
+\end{summarybox}
+
+\generalinstructions{20\_adaptive\_filters\_and\_kalman\_estimation}
+
+\section*{Background and Motivation}
+A fixed filter embodies assumptions about the signal and noise. Adaptive filters adjust their own coefficients to the data: they track a changing system, cancel interference whose waveform is unknown but correlated with a reference, and identify unknown channels. The Kalman filter takes the idea further: given a model of how a hidden state (position, velocity, sensor bias) evolves and how it is measured, it produces the optimal estimate and, equally important, its \emph{covariance}, a statement of how much to trust the answer.
+
+Navigation is the textbook application. An inertial sensor is excellent over seconds and terrible over minutes (its error grows quadratically with time); GPS is noisy but drift-free and can be lost. Fusing them with a Kalman filter gives a solution better than either, and it keeps working, with growing uncertainty, through an outage. The noise parameters you need come from the sensor analysis of problems 01 and 07.
+
+\section*{Theoretical Framework}
+\subsection{Wiener Solution and LMS}
+For a tap-weight vector $\vect w$ filtering the regressor $\vect x[n]=(x[n],\dots,x[n-M+1])^\top$ to estimate $d[n]$, the mean-square error is minimised by the normal equations $\mathbf R\vect w_o=\vect p$ with $\mathbf R=\E\{\vect x\vect x^\top\}$, $\vect p=\E\{d\,\vect x\}$. The least-mean-squares algorithm replaces the expectations by instantaneous values:
+\begin{equation}
+  e[n]=d[n]-\vect w^\top\vect x[n],\qquad \vect w\leftarrow\vect w+\mu\,e[n]\,\vect x[n],\qquad 0<\mu<\frac2{\lambda_{\max}}\ \Big(\lesssim\frac2{M\sigma_x^2}\Big),
+  \label{eq:lms}
+\end{equation}
+with misadjustment about $\mu M\sigma_x^2/2$ and convergence limited by the eigenvalue spread of $\mathbf R$. NLMS divides the step by $\epsilon+\norm{\vect x}^2$. RLS minimises an exponentially weighted least-squares cost (forgetting factor $\lambda_f$) and converges much faster at a cost of $\mathcal O(M^2)$ per sample.
+
+\subsection{Adaptive Noise Cancellation}
+A primary sensor records $s+n_0$ (wanted signal plus noise); a reference sensor records $n_1$, correlated with $n_0$ through an unknown path but not with $s$. An adaptive FIR driven by $n_1$ learns that path; the error output $e=s+n_0-\hat n_0$ converges to $s$.
+
+\subsection{Kalman Filter}
+For $\vect x_k=\mathbf F\vect x_{k-1}+\mathbf B\vect u_k+\vect w_k$ ($\vect w\sim\mathcal N(0,\mathbf Q)$) and $\vect z_k=\mathbf H\vect x_k+\vect v_k$ ($\vect v\sim\mathcal N(0,\mathbf R)$):
+\begin{align}
+  \hat{\vect x}_{k|k-1}&=\mathbf F\hat{\vect x}_{k-1}+\mathbf B\vect u_k, & \mathbf P_{k|k-1}&=\mathbf F\mathbf P_{k-1}\mathbf F^\top+\mathbf Q,\notag\\
+  \mathbf K_k&=\mathbf P_{k|k-1}\mathbf H^\top(\mathbf H\mathbf P_{k|k-1}\mathbf H^\top+\mathbf R)^{-1}, &
+  \hat{\vect x}_k&=\hat{\vect x}_{k|k-1}+\mathbf K_k(\vect z_k-\mathbf H\hat{\vect x}_{k|k-1}),\quad \mathbf P_k=(\mathbf I-\mathbf K_k\mathbf H)\mathbf P_{k|k-1}.
+  \label{eq:kf}
+\end{align}
+For a constant-velocity model with sample time $\Delta t$, $\mathbf F=\begin{psmallmatrix}1&\Delta t\\0&1\end{psmallmatrix}$ and white-acceleration noise of spectral density $q$, $\mathbf Q=q\begin{psmallmatrix}\Delta t^3/3&\Delta t^2/2\\\Delta t^2/2&\Delta t\end{psmallmatrix}$. With a measured acceleration $a_k$ as input, $\mathbf B=(\Delta t^2/2,\ \Delta t)^\top$. Appending a bias state $b$ (random walk) lets the filter estimate and remove an accelerometer bias.
+
+\subsection{Consistency}
+The \emph{innovations} $\vect\nu_k=\vect z_k-\mathbf H\hat{\vect x}_{k|k-1}$ of a correct filter are zero-mean, white, with covariance $\mathbf S_k=\mathbf H\mathbf P_{k|k-1}\mathbf H^\top+\mathbf R$. The normalised innovation squared $\mathrm{NIS}_k=\vect\nu_k^\top\mathbf S_k^{-1}\vect\nu_k$ is $\chi^2$ distributed with $\dim\vect z$ degrees of freedom; with ground truth the normalised estimation error squared $\mathrm{NEES}_k=(\vect x_k-\hat{\vect x}_k)^\top\mathbf P_k^{-1}(\vect x_k-\hat{\vect x}_k)$ is $\chi^2$ with $\dim\vect x$ degrees of freedom.
+
+\subsection{Dead-Reckoning Drift}
+Integrating an accelerometer with constant bias $b$ twice gives a position error $\tfrac12bt^2$; integrating white noise of density $\sigma_a$ gives a velocity random walk $\sigma_a\sqrt t$.
+
+\section*{Data and Simulation Specification}
+\begin{simtable}
+System identification & Unknown FIR with 8 taps, white input of variance 1 and an AR(1) coloured input with $a=0.9$; observation noise $\sigma=0.1$; $M=8$ and $M=16$ taps.\\
+Noise cancellation & A \Hz{12} vibration signal of amplitude $1$ plus engine noise (a \Hz{80} harmonic series plus broadband noise) filtered by an unknown 16-tap path; the reference sensor sees the engine noise with its own small noise.\\
+1-D tracking & Target with true velocity 5 m/s and random acceleration $q=0.1$; position measurements every \s{0.1} with $\sigma=\SI{2}{\metre}$.\\
+IMU and GPS & \texttt{sp\_common.synth.imu\_gps\_trajectory(duration=120, fs\_imu=100, fs\_gps=1, accel\_noise=0.15, accel\_bias=0.08, gps\_noise=3.0, gps\_outage=(60,80))}: planar motion, accelerometer with bias, GPS with a 20-s outage, and the truth.\\
+Real data (choose one) & EuRoC MAV dataset (IMU at \Hz{200}, accurate ground-truth position): build ``GPS-like'' fixes at \Hz{1} with \SI{3}{\metre} noise from the ground truth and run your filter; or record ADS-B aircraft positions with an RTL-SDR and \texttt{dump1090} and smooth the tracks.
+\end{simtable}
+
+\section*{Your Task}
+\begin{tasks}
+  \item \textbf{Wiener, LMS, NLMS, RLS (Stage 2).} Solve the normal equations for the identification problem and implement LMS, NLMS and RLS. Plot learning curves (mean-square error versus iteration, averaged over 200 runs) for several $\mu$, verify the stability bound of Eq.~\eqref{eq:lms}, measure the misadjustment against $\mu M\sigma_x^2/2$, and show how colouring the input (eigenvalue spread of $\mathbf R$) slows LMS but barely affects RLS.
+  \item \textbf{Noise cancellation.} Build the canceller with NLMS. Measure the noise reduction in dB, the distortion of the \Hz{12} signal and the convergence time; show what happens to the output when the reference sensor also picks up some of the wanted signal.
+  \item \textbf{Kalman filter in one dimension.} Implement Eq.~\eqref{eq:kf} for the constant-velocity tracker. Compare position and velocity errors with a moving average and a finite difference. Iterate the Riccati equation to the steady-state gain and compare with the $\alpha$--$\beta$ filter. Test innovation whiteness (autocorrelation within $\pm1.96/\sqrt N$) and NIS bounds.
+  \item \textbf{IMU and GPS fusion.} Implement the planar filter with state $(x,y,v_x,v_y)$, the accelerometer as control input at \Hz{100} and GPS updates at \Hz{1}. Derive $\mathbf Q$ from $\sigma_a$ (white-noise acceleration) and $\mathbf R$ from the GPS noise. Compare the position RMSE of the filter, of GPS alone (interpolated) and of pure dead reckoning.
+  \item \textbf{Bias estimation and the outage.} Add accelerometer-bias states with random-walk noise. Show the bias estimate converging, the position error through the \s{60}--\s{80} outage with and without bias states, and plot the covariance with $3\sigma$ envelopes. Determine how long an outage the filter can bridge while keeping the position error below \SI{10}{\metre}.
+  \item \textbf{Tuning and consistency.} Sweep $\mathbf Q$ by factors $10^{-2}$ to $10^{2}$; compute average NEES and NIS with ground truth over 50 runs and identify over- and under-confident filters. Relate $\mathbf Q$ to the Allan-variance parameters of problem 01 (white noise to $\sigma_a$, random walk to the bias process noise).
+  \item \textbf{Real data.} Run the fusion filter on EuRoC (or ADS-B) data, report the position RMSE against ground truth and the NIS statistics, and discuss which model assumptions fail on real motion.
+\end{tasks}
+
+\begin{checkpoint}
+Pure dead reckoning with a constant bias $b=\SI{0.08}{\metre\per\second\squared}$ drifts as $\tfrac12bt^2$: \SI{144}{\metre} after \s{60}, \SI{576}{\metre} after \s{120}. The LMS step must satisfy $\mu<2/\lambda_{\max}$; for unit-variance white input and $M=8$, $\mu<0.25$ is the practical limit. A consistent filter has time-averaged NIS equal to $\dim\vect z$ (2 for planar GPS) and NEES equal to $\dim\vect x$. A converged filter's innovations are white to within the $\pm1.96/\sqrt N$ band.
+\end{checkpoint}
+
+\section*{Aerospace Application Link}
+A small UAV must keep its position error under \SI{10}{\metre} for a \s{60} GPS outage. Dead reckoning from an accelerometer with constant bias $b$ needs $\tfrac12bt^2<10$, i.e.\ $b<2\cdot10/60^2=\SI{5.6e-3}{\metre\per\second\squared}$ ($0.57\,\mathrm{mg}$) \emph{without} bias estimation. Using your Task~5 results state which accelerometer grade is required with and without bias states, how long the filter can bridge outages in each case, and what the covariance tells the flight computer about when to stop trusting the navigation solution.
+
+\section*{Deliverables}
+\begin{delivs}
+  \item[D1] \textbf{Adaptive filters:} Wiener solution, LMS/NLMS/RLS learning curves, stability bound and misadjustment checks.
+  \item[D2] \textbf{Noise cancellation:} the canceller with reduction in dB, signal distortion and the failure case.
+  \item[D3] \textbf{Kalman 1-D:} implementation, steady-state gain, innovation and NIS tests.
+  \item[D4] \textbf{IMU/GPS fusion:} the planar filter, RMSE comparison and the outage bridging analysis with covariance envelopes.
+  \item[D5] \textbf{Tuning, consistency and real data:} NEES/NIS sweep over $\mathbf Q$, the link to Allan variance, EuRoC or ADS-B result.
+  \item[D6] \textbf{Memo (300 words):} ``What IMU grade and filter do we need for a 60-second GPS outage?'' Cite at least two external sources.
+  \item[Bonus] (a) Implement an extended Kalman filter for range--bearing measurements. (b) Implement a Rauch--Tung--Striebel smoother and quantify the gain over the filter. (c) Replace the Kalman filter by a particle filter for a non-Gaussian measurement noise and compare.
+\end{delivs}
+
+\section*{Learning Resources}
+\resourcegroup{Adaptive Filtering}
+\begin{resources}
+  \item Haykin, S. \emph{Adaptive Filter Theory}.
+  \item Widrow, B., Stearns, S.D. \emph{Adaptive Signal Processing} (noise cancelling).
+  \item Widrow, B.\ et al.\ (1975). ``Adaptive noise cancelling: principles and applications.'' Proc.\ IEEE 63, 1692.
+\end{resources}
+\resourcegroup{Kalman Filtering and Navigation}
+\begin{resources}
+  \item Kalman, R.E. (1960). ``A new approach to linear filtering and prediction problems.'' J.\ Basic Eng.\ 82, 35.
+  \item Labbe, R. \emph{Kalman and Bayesian Filters in Python} (free online book on GitHub, with notebooks).
+  \item Bar-Shalom, Y., Li, X.R., Kirubarajan, T. \emph{Estimation with Applications to Tracking and Navigation} (NIS, NEES, tuning).
+  \item Groves, P.D. \emph{Principles of GNSS, Inertial, and Multisensor Integrated Navigation Systems}.
+\end{resources}
+\resourcegroup{Data and Tools}
+\begin{resources}
+  \item EuRoC MAV dataset: \url{https://projects.asl.ethz.ch/datasets/doku.php?id=kmavvisualinertialdatasets}; OpenSky Network: \url{https://opensky-network.org}
+  \item NumPy linear algebra and SciPy: \url{https://numpy.org/doc/stable/reference/routines.linalg.html}
+\end{resources}
+
+\evaluation
+\end{document}

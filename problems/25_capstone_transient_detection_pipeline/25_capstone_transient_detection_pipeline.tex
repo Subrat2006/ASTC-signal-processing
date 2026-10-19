@@ -1,0 +1,112 @@
+%% META id=25
+%% META slug=25_capstone_transient_detection_pipeline
+%% META title=Capstone: An End-to-End Transient Detection Pipeline
+%% META part=E
+%% META level=5
+%% META effort=35--60 hours
+%% META prereq=Any ten earlier problems, including 07, 18 and 19 or 22
+%% META theory=Pipeline architecture, calibrated detection statistics, trials factors over timescales, injection--recovery completeness, on/off significance, parameter estimation with uncertainties, reproducible reporting
+%% META skills=Data audit, cleaning and detection pipeline assembly, two independent detectors, injection-recovery completeness curves, T90 and fluence estimation with bootstrap errors, red-team stress tests, packaging with tests, circular-style report
+\documentclass[11pt,a4paper]{article}
+\usepackage{spl}
+\begin{document}
+\splheader{25}{Capstone: Transient Detection Pipeline}{Part E: Machine Learning and Capstone \quad Level 5}%
+{End-to-End Pipeline, Calibrated Detection, Injection--Recovery, Parameter Estimation, Reproducible Reporting}%
+{any ten earlier problems, including 07, 18 and 19 or 22}{35--60 hours}
+
+\begin{summarybox}{Capstone: Detect, Characterise and Defend a Transient}
+Choose a real astronomical or flight-data transient and build the whole chain: audit the data, clean it, filter it, detect with two independent methods, calibrate the false-alarm rate on null data, measure the completeness by injecting fake signals, estimate the event's parameters with honest uncertainties, attack your own pipeline with stress tests, package it with tests, and write the result up as a short circular or paper. A detection is only as good as the argument you can make against its critics.
+\end{summarybox}
+
+\generalinstructions{25\_capstone\_transient\_detection\_pipeline}
+
+\section*{Background and Motivation}
+Every earlier problem isolated one skill. Real work needs all of them at once, in the right order, with the discipline to measure what each step does to the answer. A burst monitor on a satellite produces a stream of photons; a ground team must decide, within minutes, whether a feature in it is a real gamma-ray burst, report its time, duration and strength, and defend the claim against ``it is just noise'' and ``it is a detector artefact''. The same chain, with different data, serves a transit search in a photometric light curve, a chirp search in interferometer strain, a satellite pass analysis, or an anomaly flag on flight data.
+
+The capstone asks you to produce the deliverable such a team would: not a notebook that finds a bump, but a \emph{pipeline} that is reproducible (one command from raw data to figures), \emph{calibrated} (a measured false-alarm rate), \emph{characterised} (a measured sensitivity curve), \emph{honest} (uncertainties and failure modes) and \emph{reported} (a document a colleague can act on).
+
+\section*{Theoretical Framework}
+\subsection{Pipeline Architecture}
+A pipeline is a sequence of stages, each with a testable contract: (1) \emph{ingest and audit} (units, time systems, data-quality flags, gaps); (2) \emph{clean} (outliers, trends; problem 18); (3) \emph{filter/transform} (matched filter, whitening, time--frequency; problems 14--19); (4) \emph{detect} (a statistic with a calibrated null distribution); (5) \emph{cluster/vet} (group candidates, reject artefacts; problem 22); (6) \emph{characterise} (parameter estimates with errors); (7) \emph{report}. Every stage logs its configuration and random seed so that a run can be reproduced.
+
+\subsection{Calibrated Significance and Trials}
+A statistic $\rho$ is useful only with a null distribution, estimated from data that cannot contain the signal (off-source stretches, time slides, swapped quadrants) or from simulation of the background model. With $N_{\rm trials}$ independent opportunities (bins, bin widths, templates, sky positions) the global false-alarm probability is $P_{\rm glob}\approx1-(1-P_1)^{N_{\rm trials}}$. For on/off counting (source region $N_{\rm on}$, background region $N_{\rm off}$, exposure ratio $\alpha$) the Li--Ma significance is
+\begin{equation}
+  S=\sqrt2\left\{N_{\rm on}\ln\!\left[\frac{1+\alpha}{\alpha}\,\frac{N_{\rm on}}{N_{\rm on}+N_{\rm off}}\right]+N_{\rm off}\ln\!\left[(1+\alpha)\frac{N_{\rm off}}{N_{\rm on}+N_{\rm off}}\right]\right\}^{1/2}.
+  \label{eq:lima}
+\end{equation}
+
+\subsection{Sensitivity: Injection--Recovery}
+Add simulated signals of known strength $A$ at random times to real background data and run the pipeline unchanged. The \emph{completeness} $\eta(A)$ is the fraction recovered at the calibrated threshold; its error bars are binomial (Wilson). The curve $\eta(A)$ is the sensitivity statement of the paper (for example ``90\% complete above fluence $F_{90}$'').
+
+\subsection{Parameter Estimation}
+For a burst, the \emph{$T_{90}$} duration is the time containing from $5\%$ to $95\%$ of the background-subtracted cumulative counts; the \emph{fluence} is the total background-subtracted counts (or energy). Uncertainties follow by bootstrap or by repeated injection: resample the background-subtracted events or re-run on injected copies and take percentiles. Biases from the cleaning stage (problem 18) must be measured, not assumed.
+
+\subsection{Reproducibility and Testing}
+Package the code as a module with a command-line entry point and a configuration file; add unit tests for the pure functions (binning, baseline, threshold, $T_{90}$) using \texttt{sp\_common.synth} data with known truth; pin library versions; fix seeds; keep raw data out of the repository but record checksums and the download recipe.
+
+\section*{Data and Simulation Specification}
+\begin{simtable}
+Track A (recommended) & Gamma-ray burst in a photon event list: an AstroSat CZTI level-2 event file (quadrants Q0--Q3, TIME and ENERGY, as in your session) or Fermi GBM time-tagged events; plus at least two burst-free stretches or files for background and null calibration.\\
+Track B & Exoplanet transit search in a TESS or Kepler light curve: detection of a known planet and an injection--recovery of planets of varying depth.\\
+Track C & Gravitational-wave transient in LIGO open data around a published event (GWOSC), whitening plus a template bank.\\
+Track D & A satellite telemetry or beacon pass from SatNOGS: signal acquisition, Doppler track and decode attempt, with a pass-quality metric.\\
+Track E & Flight-data event detection (burnout, apogee, anomaly) on your own sensor logs or on open IMU/baro data.\\
+Synthetic development set & \texttt{sp\_common.synth.grb\_event\_list}, \texttt{transit\_lightcurve}, \texttt{chirp\_in\_noise}, \texttt{satellite\_doppler\_pass} or \texttt{barometer\_rocket} corresponding to your track; develop and test on these \emph{first}, with truth available, then run on the real data.\\
+Null and injection sets & At least 500 null light curves or segments and at least 200 injections per strength at five or more strengths.
+\end{simtable}
+
+\section*{Your Task}
+\begin{tasks}
+  \item \textbf{Scope and data audit (Stage 1).} State the science question, choose the track, document data provenance (source, version, download date, checksum), units, time system, quality flags and known instrument artefacts. Write the configuration file and the planned stage-by-stage design with the acceptance test of each stage. Estimate beforehand, from problems 07 and 19, the expected sensitivity.
+  \item \textbf{Cleaning and preprocessing.} Implement the cleaning stage with choices justified by the bias measurements of problem 18; document the data fraction removed at every step and the effect on the quantities you will estimate. Verify on the synthetic set that cleaning does not bias the injected parameters.
+  \item \textbf{Two independent detection methods.} Implement at least two detectors that differ in principle (for example a matched filter or $n$-sigma excess search on the cleaned series, and a machine-learning or clustering detector from problems 22--24). Calibrate each threshold on the null set and report the false-alarm rate with Wilson intervals, including the trials factor from every bin width, template or segment you search.
+  \item \textbf{Injection--recovery.} Inject signals at five or more strengths into real background (or the synthetic set) and plot the completeness of each detector versus strength with confidence intervals; report the strength at $50\%$ and $90\%$ completeness. Compare the detectors and explain differences through the methods' assumptions.
+  \item \textbf{Characterisation of the real event.} Run on the real data. Report the candidate's time, duration ($T_{90}$ or equivalent), peak rate, fluence and significance (Eq.~\eqref{eq:lima} or your calibrated $P_{\rm glob}$), each with uncertainties from a bootstrap or injection ensemble. Compare with the literature (burst catalogue, GCN circular, planet catalogue, event paper) and discuss any disagreement.
+  \item \textbf{Red team.} Attack your own pipeline with at least five stress tests, for example: a background rate drifting by $50\%$, a sudden gain change, bursts of non-Poisson noise, detector dropouts, double events overlapping in time, an injected signal at the edge of the record, a very long gap. For each state what the pipeline does, what the failure looks like and the mitigation.
+  \item \textbf{Packaging.} Provide a package with a command-line entry (\texttt{python -m yourpipeline --config config.yaml}) that goes from raw data to the figures and the results table in one command; write at least ten unit tests; include a \texttt{README} explaining installation, data download and reproduction, and a \texttt{requirements.txt} with pinned versions.
+  \item \textbf{Report and presentation.} Write an eight-page report (abstract, data, method, calibration, sensitivity, results, limitations, conclusions, references) in the style of a short journal paper or a GCN circular, and prepare a 10-minute talk. Include a section ``What would make us wrong?''
+\end{tasks}
+
+\begin{checkpoint}
+Your calibration is acceptable if the false-alarm rate measured on an independent set of null segments agrees with the calibration set within its Wilson interval. Your sensitivity claim is acceptable if the injected signals at the claimed $90\%$ completeness strength are recovered at that rate in an independent injection run. On the synthetic burst the recovered $T_{90}$ should agree with the truth computed from \texttt{truth['rate']} to within about $20\%$ and the recovered start time to within a few bins; report any bias you find.
+\end{checkpoint}
+
+\section*{Aerospace Application Link}
+Treat your pipeline as the ground segment of a mission: state the data latency from observation to alert, the processing time per orbit of data on a laptop, the alert content (time, duration, significance, sky or orbit information) and the false-alarm rate that the operations team can tolerate (for example one false alert per month). Compare with what the onboard trigger of a real burst monitor does and argue which analyses belong on board (low latency, low compute, high false-alarm tolerance) and which on the ground.
+
+\section*{Deliverables}
+\begin{delivs}
+  \item[D1] \textbf{Design document and data audit:} science question, provenance table, configuration, stage contracts and expected sensitivity.
+  \item[D2] \textbf{Pipeline code:} package with command-line entry, configuration, pinned requirements and at least ten passing unit tests.
+  \item[D3] \textbf{Calibration and sensitivity:} null false-alarm rates with intervals and completeness curves for both detectors.
+  \item[D4] \textbf{Results on the real event:} results table with uncertainties, comparison with the literature, all figures reproducible from one command.
+  \item[D5] \textbf{Eight-page report and ten-minute presentation} including the red-team results and the ``What would make us wrong?'' section.
+  \item[D6] \textbf{Memo (400 words):} ``Would I stake my name on this detection?'' A frank assessment of the evidence, limitations and what independent confirmation would be required.
+  \item[Bonus] (a) A streaming version that processes data in chunks with a bounded latency and reproduces the batch results. (b) A published-result comparison: reproduce a published number from the original paper within errors. (c) Contribute a fix or an improved problem statement to this repository through a pull request and have it reviewed by a peer.
+\end{delivs}
+
+\section*{Learning Resources}
+\resourcegroup{Detection, Significance and Sensitivity}
+\begin{resources}
+  \item Li, T.-P., Ma, Y.-Q. (1983). ``Analysis methods for results in gamma-ray astronomy.'' Astrophys.\ J.\ 272, 317.
+  \item Kay, S.M. \emph{Fundamentals of Statistical Signal Processing, Vol.~II: Detection Theory}.
+  \item Gross, E., Vitells, O. (2010). ``Trial factors for the look elsewhere effect in high energy physics.'' Eur.\ Phys.\ J.\ C 70, 525.
+  \item Abbott, B.P.\ et al.\ (2016). ``GW150914: first results from the search for binary black hole coalescence with Advanced LIGO.'' Phys.\ Rev.\ D 93, 122003.
+\end{resources}
+\resourcegroup{Burst Astronomy and Transit Searches}
+\begin{resources}
+  \item Kouveliotou, C.\ et al.\ (1993). ``Identification of two classes of gamma-ray bursts.'' Astrophys.\ J.\ Lett.\ 413, L101 (the $T_{90}$ duration).
+  \item Bhalerao, V.\ et al.\ (2017). ``The Cadmium Zinc Telluride Imager on AstroSat.'' J.\ Astrophys.\ Astron.\ 38, 31.
+  \item Ricker, G.R.\ et al.\ (2015). ``Transiting Exoplanet Survey Satellite (TESS).'' J.\ Astron.\ Telesc.\ Instrum.\ Syst.\ 1, 014003.
+  \item Gamma-ray Coordinates Network (GCN) circular archive for the style of event reports: \url{https://gcn.nasa.gov}
+\end{resources}
+\resourcegroup{Reproducible Research and Tools}
+\begin{resources}
+  \item Wilson, G.\ et al.\ (2014). ``Best practices for scientific computing.'' PLoS Biology 12, e1001745.
+  \item Wilson, G.\ et al.\ (2017). ``Good enough practices in scientific computing.'' PLoS Comput.\ Biol.\ 13, e1005510.
+  \item Astropy, Lightkurve, GWpy, SatNOGS: \url{https://docs.astropy.org}, \url{https://lightkurve.github.io/lightkurve/}, \url{https://gwpy.github.io}, \url{https://db.satnogs.org}
+\end{resources}
+
+\evaluation
+\end{document}

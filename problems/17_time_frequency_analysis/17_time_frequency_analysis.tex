@@ -1,0 +1,113 @@
+%% META id=17
+%% META slug=17_time_frequency_analysis
+%% META title=Time--Frequency Analysis: STFT, Wavelets and Chirps
+%% META part=D
+%% META level=3
+%% META effort=14--18 hours
+%% META prereq=Problems 12, 13
+%% META theory=Short-time Fourier transform and spectrogram, window-length trade-off, chirps and instantaneous frequency, continuous and discrete wavelet transforms, whitening, gravitational-wave chirp law
+%% META skills=STFT and inverse STFT coding, ridge extraction, Morlet CWT via FFT, DWT band analysis, noise whitening, power-law chirp fitting to estimate chirp mass
+\documentclass[11pt,a4paper]{article}
+\usepackage{spl}
+\begin{document}
+\splheader{17}{Time--Frequency Analysis}{Part D: Digital Signal Processing \quad Level 3}%
+{STFT, Spectrogram, Wavelets, Instantaneous Frequency, Chirps in Noise}%
+{Problems 12, 13}{14--18 hours}
+
+\begin{summarybox}{Time--Frequency Analysis: When the Spectrum Changes with Time}
+A satellite's Doppler curve, an engine run-up and a gravitational-wave inspiral are all signals whose frequency moves. Build the STFT from scratch, choose the window by the chirp-rate rule, whiten noisy data, track a chirp ridge, fit the inspiral law to recover a chirp mass, compare with wavelet scalograms, and apply the method to open gravitational-wave data.
+\end{summarybox}
+
+\generalinstructions{17\_time\_frequency\_analysis}
+
+\section*{Background and Motivation}
+The Fourier transform answers ``which frequencies are present'' but not ``when''. For stationary signals that is enough; for the signals that matter most in aerospace it is not. The received tone of a passing satellite sweeps through \SI{10}{\kilo\hertz} in minutes; a rocket engine's vibration lines sweep as the shaft spins up and cross structural resonances; the gravitational wave from two merging black holes sweeps from \SI{35}{\hertz} to \SI{250}{\hertz} in \SI{0.2}{\second}.
+
+The short-time Fourier transform (STFT) slides a window through the data and computes a spectrum in each position. It is limited by the uncertainty principle of problem 04: a short window localises events in time but smears frequency, a long window does the reverse. Wavelets use windows that scale with frequency, which suits transients. In noisy data a spectrogram is only useful after \emph{whitening}: dividing the data by the amplitude spectral density of the noise so that every frequency contributes equally.
+
+\section*{Theoretical Framework}
+\subsection{STFT and Spectrogram}
+\begin{equation}
+  X[m,k]=\sum_nx[n]\,w[n-mH]\,\ee^{-\jj2\pi kn/N},\qquad \mathrm{SPEC}[m,k]=|X[m,k]|^2,
+  \label{eq:stft}
+\end{equation}
+with hop $H$ and window $w$. The inverse STFT by overlap-add is exact if the windows satisfy the constant-overlap-add (COLA) condition $\sum_mw[n-mH]=\mathrm{const}$; for a periodic Hann window it holds for hops of $N/2$ and $N/4$. Time resolution $\approx$ window length, frequency resolution $\approx\mathrm{ENBW}\cdot f_s/N_w$.
+
+\subsection{Chirps and Instantaneous Frequency}
+A linear chirp $x(t)=\cos\big(2\pi(f_0t+\tfrac12kt^2)\big)$ has instantaneous frequency $f(t)=f_0+kt$ (rate $k$ in Hz/s). The spectrogram ridge follows $f(t)$ best when the window length is about $T_w\approx1/\sqrt k$ (the frequency change within a window equals the window's resolution). For a monocomponent signal the analytic signal $x_a=x+\jj\mathcal H\{x\}$ gives $f(t)=\frac1{2\pi}\dd\arg x_a/\dd t$.
+
+\subsection{Inspiral Chirp}
+For two compact objects with chirp mass $\mathcal M_c$ at leading (Newtonian) order, with $T_c=G\mathcal M_c/c^3$ and time to coalescence $\tau=t_c-t$,
+\begin{equation}
+  f(\tau)=\frac1\pi\left(\frac5{256\,\tau}\right)^{3/8}T_c^{-5/8},\qquad
+  \Phi(\tau)=-2\left(\frac{\tau}{5T_c}\right)^{5/8},\qquad h\propto f^{2/3}\cos\Phi,
+  \label{eq:chirp}
+\end{equation}
+so $f^{-8/3}=\pi^{8/3}\frac{256}{5}T_c^{5/3}\,(t_c-t)$ is a \emph{straight line} in time; its slope gives $\mathcal M_c$, its zero-crossing the merger time.
+
+\subsection{Whitening}
+If the noise has one-sided PSD $S_n(f)$, the whitened data $\tilde d(f)=d(f)/\sqrt{S_n(f)}$ has a flat spectrum. In practice $S_n$ is estimated by Welch's method on a stretch without signal (problem 13), and the data is band-passed to the sensitive band.
+
+\subsection{Wavelets}
+The continuous wavelet transform with a mother wavelet $\psi$ is $W(a,b)=a^{-1/2}\int x(t)\psi^\ast\!\big((t-b)/a\big)\dd t$. For the Morlet wavelet $\psi(t)=\pi^{-1/4}\ee^{\jj\omega_0t}\ee^{-t^2/2}$ the scale $a$ corresponds to the frequency $f\approx\omega_0/(2\pi a)$ (in units of the sampling interval). Windows are long at low frequency and short at high frequency (constant Q). The discrete wavelet transform (DWT) with dyadic filter banks splits the band into octaves: level $j$ detail coefficients cover roughly $[f_s/2^{j+1},\,f_s/2^{j}]$.
+
+\section*{Data and Simulation Specification}
+\begin{simtable}
+Linear chirp & $f_s=\kHz{4}$, $f_0=\Hz{200}$, $k=\SI{100}{\hertz\per\second}$, duration \s{4}, white noise at amplitude SNR $1$ and $0.3$.\\
+Gravitational-wave-like chirp & \texttt{sp\_common.synth.chirp\_in\_noise(fs=4096, duration=16, t\_merger=12, mchirp\_msun=30, target\_snr=12)}: chirp from \Hz{20} to about \Hz{148} in \SI{0.75}{\second} in coloured noise; also with \texttt{target\_snr=8} and \texttt{25}.\\
+Doppler pass & \texttt{sp\_common.synth.satellite\_doppler\_pass(duration\_s=120, fs=20000, snr\_db=20)} and with \texttt{snr\_db=0}.\\
+Run-up (create yourself) & Shaft speed ramping from 600 to 6000 rpm in \s{20} with harmonics 1--4 and a structural resonance at \Hz{250}.\\
+Real data (strongly recommended) & GW150914: 32 s of LIGO Hanford strain at \kHz{4} around GPS time 1126259462 from the Gravitational Wave Open Science Center (GWOSC, use the \texttt{gwosc}/\texttt{gwpy} tutorials). Alternative: a SatNOGS waterfall of a CubeSat pass.
+\end{simtable}
+
+\section*{Your Task}
+\begin{tasks}
+  \item \textbf{Window length and the uncertainty trade-off (Stage 2).} Compute spectrograms of the clean linear chirp for window lengths $T_w=0.02,\,0.1,\,\s{0.5}$. Measure the ridge width in time and frequency, show the optimum near $1/\sqrt k=\s{0.1}$ and explain with Eq.~\eqref{eq:stft} and the uncertainty principle.
+  \item \textbf{STFT from scratch.} Implement the STFT and inverse STFT (overlap-add) with a Hann window. Verify perfect reconstruction for 50\% and 75\% overlap, show failure for a hop that violates COLA, compare with \texttt{scipy.signal.stft} and express the spectrogram in correct PSD units (problem 12).
+  \item \textbf{Chirp in coloured noise.} Take \texttt{chirp\_in\_noise}. Show the raw spectrogram (the chirp is invisible), estimate the PSD by Welch's method from a stretch without signal, whiten and band-pass to \Hz{20}--\Hz{300}, and show the whitened spectrogram. Extract the ridge and report the frequency-versus-time track with a measure of its scatter at SNR $=8,12,25$.
+  \item \textbf{Chirp-law fit.} Plot $f^{-8/3}$ against time for your ridge, fit a straight line and use its slope to estimate $\mathcal M_c$ and its zero-crossing to estimate the merger time. Compare both with the truth and report the uncertainty (bootstrap over ridge points); state how it depends on SNR.
+  \item \textbf{Continuous wavelet transform.} Implement the Morlet CWT with FFT-based convolution. Compute scalograms for the same data and for a short transient (a 10-ms sine-Gaussian blip at \Hz{200} plus the chirp), compare with the spectrogram on a log-frequency axis and describe where each representation is superior.
+  \item \textbf{Hilbert instantaneous frequency and Doppler.} Estimate the instantaneous frequency of the clean Doppler pass with the analytic signal; at \dB{0} SNR use the spectrogram ridge. Fit the straight-line model $\Delta f=-f_0v^2t/(c\sqrt{d^2+v^2t^2})$ for $d$, $v$ and $t_0$.
+  \item \textbf{Discrete wavelet analysis and a Campbell diagram.} Decompose the chirp record with a Daubechies-4 DWT (\texttt{pywt}), plot the per-level energy and identify the levels containing the chirp. Then build the run-up signal, compute its spectrogram, overlay the engine-order lines and identify the time at which each harmonic crosses the \Hz{250} resonance.
+  \item \textbf{Real data.} Process GW150914 (or your SatNOGS pass): whiten with a Welch PSD from off-source data, band-pass \Hz{35}--\Hz{350}, plot the spectrogram or Q-transform and read the frequency track. Compare the observed sweep with the published behaviour (a rise from about \Hz{35} to \Hz{250} in roughly \s{0.2}).
+\end{tasks}
+
+\begin{checkpoint}
+For $k=\SI{100}{\hertz\per\second}$ the optimal window is $1/\sqrt k=\s{0.1}$. A periodic Hann window with hop $N/2$ or $N/4$ reconstructs perfectly to machine precision. The synthetic chirp runs from \Hz{20} to about \Hz{148}; $f^{-8/3}$ is linear in time with negative slope and crosses zero at the merger time $t_c=\s{12}$. DWT level $j$ covers $[f_s/2^{j+1},f_s/2^j]$.
+\end{checkpoint}
+
+\section*{Aerospace Application Link}
+During a static test of a rocket engine turbopump the shaft speed ramps from rest to operating speed while a structural mode sits at a fixed frequency. Using your Campbell diagram, state at which speeds each engine order crosses the mode, estimate the amplification of vibration at each crossing from the spectrogram, and explain how a faster run-up (shorter dwell at resonance) trades against thrust-transient loads. Describe how the same tools on a CubeSat's Doppler curve give the time of closest approach and the pass geometry for orbit determination.
+
+\section*{Deliverables}
+\begin{delivs}
+  \item[D1] \textbf{Window trade-off:} spectrogram comparisons and measured resolutions.
+  \item[D2] \textbf{STFT implementation:} the code, the perfect-reconstruction tests and the COLA failure.
+  \item[D3] \textbf{Chirp in noise:} whitening pipeline, whitened spectrograms and the ridge extraction at three SNRs.
+  \item[D4] \textbf{Chirp-mass fit:} the linearised fit with uncertainties versus SNR, and the CWT/DWT comparison.
+  \item[D5] \textbf{Doppler and Campbell diagram:} fit parameters with errors, and the resonance-crossing table.
+  \item[D6] \textbf{Real-data report and memo (300 words):} GW150914 (or SatNOGS) time--frequency analysis and ``what does the frequency track tell us?'' Cite at least two external sources.
+  \item[Bonus] (a) Compute the Wigner--Ville distribution and explain cross-terms. (b) Implement the constant-Q (Q-)transform used in LIGO glitch studies. (c) Use the synchrosqueezing transform to sharpen the ridge.
+\end{delivs}
+
+\section*{Learning Resources}
+\resourcegroup{Time--Frequency Methods}
+\begin{resources}
+  \item Cohen, L. \emph{Time--Frequency Analysis}.
+  \item Mallat, S. \emph{A Wavelet Tour of Signal Processing}.
+  \item Torrence, C., Compo, G.P. (1998). ``A practical guide to wavelet analysis.'' Bull.\ Am.\ Meteorol.\ Soc.\ 79, 61.
+  \item Allen, J.B., Rabiner, L.R. (1977). ``A unified approach to short-time Fourier analysis and synthesis.'' Proc.\ IEEE 65, 1558.
+\end{resources}
+\resourcegroup{Gravitational-Wave Data and Chirps}
+\begin{resources}
+  \item Abbott, B.P.\ et al.\ (LIGO and Virgo) (2016). ``Observation of gravitational waves from a binary black hole merger.'' Phys.\ Rev.\ Lett.\ 116, 061102, arXiv:1602.03837.
+  \item Gravitational Wave Open Science Center, data and tutorials: \url{https://gwosc.org}; GWpy: \url{https://gwpy.github.io}
+  \item Maggiore, M. \emph{Gravitational Waves, Vol.~1}, Ch.~4 (the inspiral chirp).
+\end{resources}
+\resourcegroup{Tools}
+\begin{resources}
+  \item SciPy \texttt{signal.stft}, \texttt{signal.spectrogram}, \texttt{signal.hilbert}; PyWavelets: \url{https://pywavelets.readthedocs.io}; SatNOGS: \url{https://db.satnogs.org}
+\end{resources}
+
+\evaluation
+\end{document}

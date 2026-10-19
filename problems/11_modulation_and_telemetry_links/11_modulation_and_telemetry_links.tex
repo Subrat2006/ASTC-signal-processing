@@ -1,0 +1,112 @@
+%% META id=11
+%% META slug=11_modulation_and_telemetry_links
+%% META title=Modulation, Demodulation and Telemetry Links
+%% META part=C
+%% META level=3
+%% META effort=14--18 hours
+%% META prereq=Problems 04, 07, 08
+%% META theory=AM and FM, BPSK and matched-filter detection, BER versus Eb/N0, link budget, Doppler shift and rate, carrier recovery with a Costas loop
+%% META skills=Modulator and demodulator coding, Monte Carlo BER with confidence intervals, Costas-loop simulation, Doppler curve fitting, link-budget calculation
+\documentclass[11pt,a4paper]{article}
+\usepackage{spl}
+\begin{document}
+\splheader{11}{Modulation and Telemetry Links}{Part C: Electronics for Signal Processing \quad Level 3}%
+{Analog and Digital Modulation, Matched-Filter Reception, BER, Link Budgets, Doppler, Carrier Recovery}%
+{Problems 04, 07, 08}{14--18 hours}
+
+\begin{summarybox}{Modulation and Telemetry Links: Getting Bits from a Satellite to the Ground}
+A CubeSat's signal arrives about $10^{-14}$ of a watt strong, \SI{10}{\kilo\hertz} off frequency and sweeping. Simulate AM, FM and BPSK, reproduce the theoretical BER curve of the matched-filter receiver, recover a carrier with a Costas loop, track a Doppler S-curve, and close a link budget with its margin.
+\end{summarybox}
+
+\generalinstructions{11\_modulation\_and\_telemetry\_links}
+
+\section*{Background and Motivation}
+A satellite telemetry link is a chain of signal-processing problems. The transmitter modulates data onto a carrier; the signal crosses $\SI{1000}{\kilo\metre}$ of vacuum losing $10^{14}$ in power; the receiver must find the carrier that Doppler shift has moved by up to \SI{10}{\kilo\hertz}, lock to its phase, filter optimally, and decide each bit against noise. Whether it works is summarised by one number, $E_b/N_0$, and by the margin of that number over what the modulation needs.
+
+In this problem you implement the physical layer yourself: modulation and demodulation, the optimal receiver, carrier recovery and a link budget. The results link directly to ground-station design for student CubeSats operating in the amateur UHF band, and to the matched-filter theory of problem 19.
+
+\section*{Theoretical Framework}
+\subsection{Analog Modulation}
+Amplitude modulation $s(t)=[1+m\,x(t)]\cos2\pi f_ct$ (with $|m\,x|\le1$) is demodulated by an envelope detector; frequency modulation $s(t)=\cos\!\big(2\pi f_ct+2\pi k_f\!\int x\,\dd t\big)$ by differentiating the phase. FM occupies, by Carson's rule, $B\approx2(\Delta f+f_m)$ for peak deviation $\Delta f$ and maximum message frequency $f_m$.
+
+\subsection{BPSK and the Matched Filter}
+In binary phase-shift keying a bit $b\in\{\pm1\}$ is sent as $b\,\sqrt{2E_b/T_b}\cos2\pi f_ct$ over a bit time $T_b$. With additive white Gaussian noise of one-sided density $N_0$ the optimal (matched-filter) receiver correlates with the pulse over one bit and decides by the sign, with bit-error rate
+\begin{equation}
+  \mathrm{BER}=\Qfunc\!\left(\sqrt{\frac{2E_b}{N_0}}\right)=\tfrac12\erfc\!\sqrt{\frac{E_b}{N_0}},\qquad \Qfunc(x)=\frac1{\sqrt{2\pi}}\int_x^\infty\ee^{-u^2/2}\dd u.
+  \label{eq:ber}
+\end{equation}
+A phase error $\theta$ in the recovered carrier reduces the useful amplitude by $\cos\theta$: $\mathrm{BER}=\Qfunc\big(\sqrt{2E_b/N_0}\,\cos\theta\big)$.
+
+\subsection{Link Budget}
+With transmit power $P_t$, antenna gains $G_t,G_r$, free-space path loss $L_{\rm fs}=20\log_{10}(4\pi df/c)$, other losses $L_o$ and receiver noise temperature $T_s$ (all in dB):
+\begin{equation}
+  P_r=P_t+G_t+G_r-L_{\rm fs}-L_o,\qquad \frac{C}{N_0}=P_r-10\log_{10}(\kB T_s),\qquad \frac{E_b}{N_0}=\frac{C}{N_0}-10\log_{10}R_b .
+  \label{eq:link}
+\end{equation}
+The margin is $E_b/N_0$ minus the value required for the target BER (for uncoded BPSK about \dB{9.6} for $10^{-5}$).
+
+\subsection{Doppler Shift and Rate}
+A transmitter at range $r(t)$ produces $\Delta f=-f_0\,\dot r/c$. In the straight-line pass model $r=\sqrt{d_{\min}^2+(vt)^2}$, so $\Delta f(t)=-f_0v^2t/(c\,r)$, with maximum rate of change at closest approach, $|\dot{\Delta f}|_{\max}=f_0v^2/(c\,d_{\min})$.
+
+\subsection{Carrier Recovery}
+A Costas loop multiplies the received signal by the local carrier $\cos(\hat\phi)$ and $\sin(\hat\phi)$, forms the error $e=I\cdot Q$ (insensitive to the data sign), filters it with a proportional--integral loop filter and steers a numerically controlled oscillator. It locks at $\hat\phi=\phi$ or $\phi+\pi$; the $\pi$ ambiguity is resolved by differential encoding.
+
+\section*{Data and Simulation Specification}
+\begin{simtable}
+Analog tests & Message: 1 kHz tone; carrier \kHz{20}; $f_s=\kHz{200}$; AM index $m=0.5$; FM deviation $\Delta f=\kHz{5}$.\\
+BPSK & Bit rate \SI{1200}{\bit\per\second}, 8 samples per bit, $E_b/N_0=0\ldots10$ dB, at least $10^6$ bits near the low-BER points; rectangular and root-raised-cosine pulses.\\
+Carrier recovery & Frequency offset $\Delta f=\Hz{50}$, phase offset $1.0$ rad, $E_b/N_0=\dB{10}$.\\
+Doppler data & \texttt{sp\_common.synth.satellite\_doppler\_pass(f0=437e6, d\_min\_km=700, v\_rel\_kms=7, duration\_s=120, fs=20000, snr\_db=20)}, returns complex IQ and the true Doppler curve.\\
+Link parameters & $P_t=\SI{1}{\watt}$, $G_t=\dB{0}$, $G_r=\dB{12}$, $f=\MHz{437}$, slant range \km{1500}, $L_o=\dB{3}$, $T_s=\Kel{500}$, $R_b=\SI{9600}{\bit\per\second}$.\\
+Real data (optional) & A SatNOGS observation of a CubeSat beacon at 437 MHz (audio or waterfall data from the SatNOGS network and database), or your own capture with a low-cost SDR dongle; extract the Doppler curve and compare with a predicted pass.
+\end{simtable}
+
+\section*{Your Task}
+\begin{tasks}
+  \item \textbf{AM and FM (Stage 2).} Generate AM and FM signals of the 1 kHz tone, demodulate AM with an envelope detector (Hilbert magnitude) and FM by phase differentiation. Measure the occupied bandwidth of the FM signal and compare with Carson's rule; plot the demodulation distortion against modulation index.
+  \item \textbf{BPSK BER curve.} Simulate BPSK with matched-filter detection in AWGN. Plot BER against $E_b/N_0$ from 0 to 10 dB (log scale) with Wilson confidence intervals and compare with Eq.~\eqref{eq:ber}. Use the correct noise variance for your sampling (derive it).
+  \item \textbf{Receiver comparison.} Compare the matched filter with (a) sampling a single point per bit and (b) an integrate-and-dump with the wrong window length; express each loss as a dB penalty at BER $=10^{-3}$.
+  \item \textbf{Carrier recovery.} Implement a Costas loop for the BPSK signal with the given frequency and phase offset. Plot the phase error and the loop-filter output, show lock acquisition time versus loop bandwidth, demonstrate the $\pi$ ambiguity and fix it with differential encoding; quantify the BER penalty against the $\cos\theta$ prediction at several fixed phase errors.
+  \item \textbf{Doppler tracking.} From the synthetic pass estimate the Doppler curve by short-time FFT peak interpolation (choose the window length with the chirp-resolution rule of problem 17), then fit the straight-line model for $d_{\min}$, $v$ and $t_0$ by nonlinear least squares. Report the fit errors against the truth and the maximum Doppler rate, which sets the bandwidth a tracking loop needs.
+  \item \textbf{Link budget.} Evaluate Eq.~\eqref{eq:link} for the given parameters, compute the margin against uncoded BPSK at $10^{-5}$ and plot the margin against slant range from \km{500} to \km{2500} and against bit rate. Find the maximum bit rate that retains a \dB{6} margin.
+  \item \textbf{Real pass.} Analyse your SatNOGS or SDR data: find the carrier, extract the Doppler curve, locate the time of closest approach and compare with a prediction from the orbital elements (if you have them).
+\end{tasks}
+
+\begin{checkpoint}
+BER of BPSK: $0.0786$ at 0 dB, $0.0125$ at 4 dB, $2.39\times10^{-3}$ at 6 dB, $1.9\times10^{-4}$ at 8 dB and $\approx10^{-5}$ at 9.6 dB. The maximum Doppler rate of the default pass is $f_0v^2/(c\,d_{\min})\approx\SI{102}{\hertz\per\second}$ and $|\Delta f|\le\kHz{5.25}$ within the $\pm\s{60}$ window. The link budget gives $L_{\rm fs}=\dB{148.8}$, $P_r=-139.8\,\mathrm{dBW}$, $C/N_0=61.8\,\mathrm{dB\,Hz}$, $E_b/N_0\approx\dB{22.0}$, a margin of about \dB{12.4} over \dB{9.6}.
+\end{checkpoint}
+
+\section*{Aerospace Application Link}
+You must specify the student ground station for a $\SI{1}{\watt}$ UHF CubeSat. Using your link-budget and BER results, decide the lowest-cost receive antenna gain and the highest bit rate that still keeps a \dB{6} margin at \ang{10} elevation (slant range about \km{1500} for a \km{500} orbit), state the Doppler pre-compensation range and rate your receiver must follow, and estimate how many bytes you receive in one \SI{8}{\minute} pass.
+
+\section*{Deliverables}
+\begin{delivs}
+  \item[D1] \textbf{Analog modulation:} AM and FM modulators and demodulators, Carson's-rule check.
+  \item[D2] \textbf{BPSK BER:} the simulated curve with confidence intervals versus theory, and the receiver-comparison penalties.
+  \item[D3] \textbf{Carrier recovery:} Costas-loop notebook with lock curves, ambiguity demonstration and BER-versus-phase-error check.
+  \item[D4] \textbf{Doppler analysis:} the extracted curve, model fit with errors and the maximum-rate calculation.
+  \item[D5] \textbf{Link budget:} the calculation, margin plots and the real-pass analysis.
+  \item[D6] \textbf{Memo (300 words):} ``Specification of the ground station for a UHF CubeSat.'' Cite at least two external sources.
+  \item[Bonus] (a) Add rate-1/2 convolutional coding with Viterbi decoding and measure the coding gain. (b) Implement symbol-timing recovery with a Gardner detector. (c) Decode an AX.25 frame from a real recording.
+\end{delivs}
+
+\section*{Learning Resources}
+\resourcegroup{Digital Communications}
+\begin{resources}
+  \item Sklar, B. \emph{Digital Communications: Fundamentals and Applications} (BPSK, matched filter, $E_b/N_0$, link budgets).
+  \item Proakis, J.G., Salehi, M. \emph{Digital Communications} (optimum receivers, carrier synchronisation).
+  \item Gardner, F.M. \emph{Phaselock Techniques} (loop filters and noise bandwidth).
+\end{resources}
+\resourcegroup{Space Links}
+\begin{resources}
+  \item Larson, W.J., Wertz, J.R. (eds.) \emph{Space Mission Analysis and Design}, communications chapter (link budgets, antenna gains).
+  \item Maral, G., Bousquet, M. \emph{Satellite Communications Systems} (propagation, Doppler, noise temperature).
+\end{resources}
+\resourcegroup{Data and Tools}
+\begin{resources}
+  \item SatNOGS network and database: \url{https://satnogs.org}, \url{https://db.satnogs.org}
+  \item SciPy \texttt{scipy.signal} and \texttt{scipy.special.erfc}: \url{https://docs.scipy.org/doc/scipy/reference/}
+\end{resources}
+
+\evaluation
+\end{document}

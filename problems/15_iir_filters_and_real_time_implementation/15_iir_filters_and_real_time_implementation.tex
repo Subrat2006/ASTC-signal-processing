@@ -1,0 +1,105 @@
+%% META id=15
+%% META slug=15_iir_filters_and_real_time_implementation
+%% META title=IIR Filters and Real-Time Implementation
+%% META part=D
+%% META level=3
+%% META effort=12--16 hours
+%% META prereq=Problems 06, 08, 14
+%% META theory=Bilinear transform and prewarping, IIR families, zero-phase filtering, second-order sections and numerical sensitivity, fixed-point arithmetic, causality and detection delay, exponential and complementary filters
+%% META skills=Bilinear transform coding, SOS versus direct-form comparison, Q15 biquad implementation, causal event detection with delay and false-alarm statistics
+\documentclass[11pt,a4paper]{article}
+\usepackage{spl}
+\begin{document}
+\splheader{15}{IIR Filters and Real-Time Implementation}{Part D: Digital Signal Processing \quad Level 3}%
+{Recursive Filters, Bilinear Transform, Numerical Stability, Fixed-Point Biquads, Real-Time Detection}%
+{Problems 06, 08, 14}{12--16 hours}
+
+\begin{summarybox}{IIR Filters and Real-Time Implementation: Few Coefficients, Many Ways to Go Wrong}
+Turn analog designs into recursive digital filters with the bilinear transform, compare their cost with FIR designs, discover why a high-order filter written as one polynomial blows up while the same filter as cascaded sections works, implement a Q15 fixed-point biquad, and build a real-time apogee detector for a model rocket from a noisy barometer.
+\end{summarybox}
+
+\generalinstructions{15\_iir\_filters\_and\_real\_time\_implementation}
+
+\section*{Background and Motivation}
+Recursive (IIR) filters achieve a given selectivity with an order ten times lower than FIR filters, which is why they dominate on small processors and in real-time loops. The price is nonlinear phase, a possibility of instability, and sensitivity to coefficient rounding: a narrow filter has poles crowded near $z=1$, where tiny changes of coefficients move the poles across the unit circle.
+
+For a flight computer the crucial additional constraint is \emph{causality}. A zero-phase filter (forward-backward filtering) is excellent for post-flight analysis but cannot be used in flight because it needs the future. A real-time filter has delay, and that delay turns directly into a late detection. In this problem you design, implement and stress IIR filters and use them in a safety-relevant application: detecting the apogee of a rocket to fire the parachute ejection charge.
+
+\section*{Theoretical Framework}
+\subsection{Bilinear Transform and Prewarping}
+Substituting $s=\frac2T\frac{1-z^{-1}}{1+z^{-1}}$ into an analog prototype $H_a(s)$ maps the left half-plane into the unit disc and the whole $j\omega$ axis onto the unit circle, with frequency warping
+\begin{equation}
+  \Omega=\frac2T\tan\frac{\omega T}{2},\qquad \omega T=2\arctan\frac{\Omega T}{2}.
+  \label{eq:warp}
+\end{equation}
+To place a digital critical frequency $\omega_c$ exactly, design the analog prototype at the prewarped $\Omega_c=\frac2T\tan(\omega_cT/2)$. In SciPy the critical frequency \texttt{Wn} is normalised to the Nyquist frequency $f_s/2$.
+
+\subsection{Families and Zero-Phase Filtering}
+Butterworth, Chebyshev I/II and elliptic prototypes carry over unchanged; the orders needed are the analog orders of problem 08. Forward--backward filtering ($y=\mathrm{filtfilt}(x)$) gives zero phase but squares the magnitude, so the $-3$ dB point becomes $-6$ dB and the effective order doubles; it requires the entire record.
+
+\subsection{Structures and Numerical Sensitivity}
+Direct form I/II implements $\sum b_kz^{-k}/\sum a_kz^{-k}$ with the full polynomial. For high order or a narrow band the poles are very sensitive to the coefficients. Factoring into second-order sections (SOS, biquads), each realised separately and cascaded, keeps each pole pair sensitive only to its own few coefficients; ordering and gain scaling of the sections control internal overflow and noise.
+
+\subsection{Fixed-Point Implementation}
+In Q15 arithmetic a coefficient $c\in[-1,1)$ is stored as $\mathrm{round}(c\cdot2^{15})$; products need a wider accumulator (32-bit) and results are shifted back. Overflow must saturate rather than wrap. Coefficients with magnitude above 1 (such as $a_1\approx-2$ in a biquad) are handled by scaling or by splitting. Quantised poles move; with zero input a recursive filter may sustain a small \emph{limit cycle}.
+
+\subsection{Exponential Smoothing and Complementary Filters}
+$y[n]=\alpha y[n-1]+(1-\alpha)x[n]$ has its $-3$ dB frequency at $\omega_c=\arccos\!\big[1-(1-\alpha)^2/(2\alpha)\big]$ rad/sample. A complementary filter combines a low-passed absolute sensor (barometer, accelerometer) with a high-passed integrating sensor so that the two cross over smoothly.
+
+\section*{Data and Simulation Specification}
+\begin{simtable}
+Specification B & $f_s=\kHz{1}$, passband to \Hz{100} (1 dB), stopband from \Hz{200} (50 dB); the FIR comparison filter is the Specification A filter of problem 14 with relaxed attenuation.\\
+Narrowband stress test & 8th-order Butterworth low-pass with cutoff $\Hz{1}$ at $f_s=\kHz{1}$ ($W_n=0.002$).\\
+Fixed-point & Q15 biquad: Butterworth 2nd-order low-pass, cutoff $f_s/20$; input amplitude $0.5$ full scale plus a zero-input test.\\
+Barometer & \texttt{sp\_common.synth.barometer\_rocket(fs=20, duration=60)}: pressure in Pa with noise, drift and the ejection-charge pressure spike; \texttt{sp\_common.units.baro\_altitude\_m} converts to altitude. 200 noise seeds for statistics; apogee near \SI{258}{\metre} at about \SI{7.6}{\second}.\\
+Real data (optional) & Phyphox barometer on a phone carried up and down a stairwell or in a lift, sampled at the maximum rate.
+\end{simtable}
+
+\section*{Your Task}
+\begin{tasks}
+  \item \textbf{Bilinear transform by hand (Stage 2).} Derive the digital biquad coefficients of a 2nd-order Butterworth low-pass by substituting the bilinear map into the analog prototype (polynomial algebra in NumPy, no \texttt{scipy.signal.bilinear}). Verify against \texttt{scipy.signal.butter} and check that the \dB{-3} point is at the prewarped frequency.
+  \item \textbf{Warping.} Compare the magnitude response of an uncorrected bilinear design with the analog original for cutoff frequencies $f_c/f_s=0.01,0.1,0.3,0.45$; plot the frequency error and show that prewarping fixes the cutoff but not the shape far from it.
+  \item \textbf{IIR versus FIR cost.} Meet Specification B with Butterworth, Chebyshev I and elliptic filters. Tabulate order, number of coefficients, multiply--accumulates per sample and group-delay variation, and compare with the FIR filter that meets the same specification.
+  \item \textbf{Numerical stability.} Design the narrowband 8th-order Butterworth as a single transfer function (\texttt{b, a}) and as SOS. Compare their responses in float64 and float32, plot the poles, and show the instability or gross error of the direct form. Perturb the coefficients randomly at a relative level of $10^{-8}$ and measure the pole movement for both structures.
+  \item \textbf{Fixed-point biquad.} Implement a Q15 direct-form biquad with a 32-bit accumulator and saturation; compare its output with float64 over a sine input and compute the noise floor in dB below full scale. Observe the zero-input limit cycle and quantify the pole displacement caused by coefficient rounding.
+  \item \textbf{Zero-phase versus real-time.} Filter the barometer data with \texttt{lfilter} and with \texttt{filtfilt}; plot the delay between the filtered and true altitude and between their apogee times. Design a causal apogee detector: low-pass the altitude, estimate velocity, trigger after $N$ consecutive negative-velocity samples and arm only after burnout. Over 200 noise seeds report detection delay, altitude error at trigger, and the false-trigger rate caused by noise and by the ejection spike; tune the filter cutoff and $N$ to balance delay against false triggers.
+  \item \textbf{Exponential and complementary filtering.} Verify the $\alpha$--$\omega_c$ relation for $\alpha=0.9$. Build a complementary filter that fuses the barometer altitude with the double-integrated accelerometer (simulated from the true acceleration plus bias and noise) and show the improvement in lag and noise.
+\end{tasks}
+
+\begin{checkpoint}
+For $\alpha=0.9$ the exponential smoother has $\omega_c=0.1055$ rad/sample. A 2nd-order Butterworth with the correct prewarp has exactly \dB{-3.01} at the design frequency; \texttt{filtfilt} gives \dB{-6.02} there. The direct-form narrowband 8th-order filter is unusable in float32 while the SOS version agrees with float64 to better than $10^{-5}$. The IIR designs meeting Specification B have order $4$--$6$ against an FIR length of some tens of taps.
+\end{checkpoint}
+
+\section*{Aerospace Application Link}
+A model-rocket flight computer must eject the parachute within a short window around apogee, but not during boost when transonic pressure disturbances can mimic a descent. Using Task~6, report the detection delay and the false-trigger rate of your best design, the altitude lost between apogee and ejection ($\approx\tfrac12gt^2$ for a delay $t$), and the arming logic (minimum time after launch, minimum altitude, burnout detection) that keeps the false-trigger rate below one in $10^4$ flights. State whether a backup timer is justified.
+
+\section*{Deliverables}
+\begin{delivs}
+  \item[D1] \textbf{Bilinear design:} derivation, hand-coded coefficients and the warping study.
+  \item[D2] \textbf{Family comparison:} order and cost table versus the FIR design.
+  \item[D3] \textbf{Numerical stability:} float32 versus float64, direct versus SOS, pole-sensitivity measurements.
+  \item[D4] \textbf{Fixed-point biquad:} Q15 implementation, noise floor, limit-cycle and coefficient-rounding study.
+  \item[D5] \textbf{Apogee detector:} the causal design, statistics over 200 seeds and the arming logic.
+  \item[D6] \textbf{Memo (300 words):} ``Detecting apogee safely: delay versus false triggers.'' Cite at least two external sources.
+  \item[Bonus] (a) Add a Kalman filter for altitude and velocity (problem 20) and compare delay with your filter. (b) Implement the detector in C or MicroPython and run it on a microcontroller with recorded data. (c) Compare Direct-Form~I, II and transposed II in fixed point for overflow behaviour.
+\end{delivs}
+
+\section*{Learning Resources}
+\resourcegroup{IIR Design and Implementation}
+\begin{resources}
+  \item Oppenheim, A.V., Schafer, R.W. \emph{Discrete-Time Signal Processing}, Ch.~6 (structures for discrete-time systems), Ch.~7.1--7.3 (IIR design) and Ch.~6.8--6.9 (finite word length effects).
+  \item Proakis, J.G., Manolakis, D.G. \emph{Digital Signal Processing}, Ch.~8--9.
+  \item Orfanidis, S.J. \emph{Introduction to Signal Processing} (free online), chapters on IIR filter design and structures.
+\end{resources}
+\resourcegroup{Flight Systems}
+\begin{resources}
+  \item Stine, G.H. \emph{Handbook of Model Rocketry} (barometric recovery and ejection charges).
+  \item Madgwick, S.O.H., Harrison, A.J.L., Vaidyanathan, R. (2011). ``Estimation of IMU and MARG orientation using a gradient descent algorithm.'' IEEE Int.\ Conf.\ Rehabilitation Robotics (an example of complementary-style fusion).
+\end{resources}
+\resourcegroup{Tools}
+\begin{resources}
+  \item SciPy \texttt{signal.butter}, \texttt{signal.sosfilt}, \texttt{signal.filtfilt}, \texttt{signal.bilinear}: \url{https://docs.scipy.org/doc/scipy/reference/signal.html}
+\end{resources}
+
+\evaluation
+\end{document}
