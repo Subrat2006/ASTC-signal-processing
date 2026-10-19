@@ -1,0 +1,13 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sp-common"
+version = "1.0.0"
+description = "Small shared helpers and synthetic datasets for the Signal Processing Ladder problem series"
+requires-python = ">=3.10"
+dependencies = ["numpy", "scipy", "matplotlib"]
+
+[tool.setuptools.packages.find]
+include = ["sp_common*"]
